@@ -1,0 +1,36 @@
+{
+    "name": "@repo/db",
+    "version": "0.0.0",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "rimraf dist && tsup",
+        "dev": "tsup --watch",
+        "lint": "eslint . --max-warnings 0",
+        "db:generate": "prisma generate",
+        "db:migrate": "prisma migrate dev",
+        "db:deploy": "prisma migrate deploy"
+    },
+    "devDependencies": {
+        "eslint": "^10.3.0",
+        "prisma": "^7.8.0",
+        "rimraf": "^6.1.3",
+        "tsup": "^8.5.1",
+        "tsx": "^4.21.0",
+        "typescript": "5.9.2"
+    },
+    "dependencies": {
+        "@prisma/adapter-pg": "^7.8.0",
+        "@prisma/client": "^7.8.0",
+        "dotenv": "^17.4.2",
+        "pg": "^8.20.0"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        }
+    }
+}
