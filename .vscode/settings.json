@@ -1,0 +1,58 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "files.associations": {
+    "*.css": "tailwindcss"
+  },
+  "eslint.workingDirectories": [
+    {
+      "directory": "apps/api-core",
+      "changeProcessCWD": true
+    },
+    {
+      "directory": "apps/web-dashboard",
+      "changeProcessCWD": true
+    },
+    {
+      "directory": "packages/ui",
+      "changeProcessCWD": true
+    },
+    {
+      "directory": "packages/db",
+      "changeProcessCWD": true
+    }
+  ],
+  "npm.packageManager": "pnpm",
+  "files.exclude": {
+    "**/.turbo": true,
+    "**/node_modules": true,
+    "apps/api-core/dist": true,
+    "apps/web-dashboard/.next": true
+  },
+  "search.exclude": {
+    "**/.turbo": true,
+    "**/node_modules": true,
+    "apps/api-core/dist": true,
+    "apps/web-dashboard/.next": true,
+    "pnpm-lock.yaml": true
+  },
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    [
+      "cva\\(([^)]*)\\)",
+      "[\"'`]([^\"'`]*).*?[\"'`]"
+    ]
+  ],
+  "tailwindCSS.files.exclude": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "apps/api-core/**"
+  ]
+}
