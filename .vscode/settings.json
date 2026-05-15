@@ -6,6 +6,7 @@
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib",
   "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "js/ts.format.insertSpaceAfterOpeningAndBeforeClosingEmptyBraces": false,
   "files.associations": {
     "*.css": "tailwindcss"
   },
