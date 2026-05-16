@@ -37,6 +37,10 @@ export class AuthService {
     return { token };
   }
 
+  logout(): { message: string } {
+    return { message: 'Logged out successfully' };
+  }
+
   async signup(dto: SignupDto): Promise<{ token: string }> {
     const existingUser = await this.usersService.findByUsername(dto.username);
     if (existingUser) {

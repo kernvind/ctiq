@@ -37,5 +37,5 @@ export async function login(
     path: "/",
   });
 
-  redirect("/");
+  redirect("/dashboard");
 }

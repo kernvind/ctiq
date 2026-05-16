@@ -44,5 +44,5 @@ export async function signup(
     path: "/",
   });
 
-  redirect("/");
+  redirect("/dashboard");
 }
