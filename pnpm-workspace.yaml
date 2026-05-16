@@ -8,5 +8,6 @@ allowBuilds:
   esbuild: true
   msw: true
   prisma: true
+  prisma-zod-generator: true
   sharp: true
   unrs-resolver: true

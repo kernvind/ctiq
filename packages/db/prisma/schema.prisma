@@ -3,6 +3,13 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
+generator zod {
+  provider = "prisma-zod-generator"
+  output   = "../src/generated/zod"
+  mode     = "minimal"
+  // optional config = "./zod-generator.config.json" (relative to schema file)
+}
+
 datasource db {
   provider = "postgresql"
 }
@@ -12,6 +19,7 @@ model User {
   email        String  @unique
   username     String  @unique
   passwordHash String
+  /// @zod.string.min(9, { message: "Name must be greater than 8 characters" })
   name         String?
   posts        Post[]
 }
