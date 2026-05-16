@@ -6,9 +6,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
 import { UsersService } from '../users/users.service';
-import { LoginDto } from './dto/login.dto';
-import { SignupDto } from './dto/signup.dto';
-
+import type { LoginDto } from './dto/login.dto';
+import type { SignupDto } from './dto/signup.dto';
 @Injectable()
 export class AuthService {
   constructor(
@@ -52,7 +51,7 @@ export class AuthService {
       dto.username,
       dto.email,
       passwordHash,
-      dto.name,
+      dto.name ?? undefined,
     );
 
     const token = this.jwtService.sign({
