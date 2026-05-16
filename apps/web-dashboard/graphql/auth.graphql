@@ -1,0 +1,15 @@
+mutation Login($input: LoginInput!) {
+  login(input: $input) {
+    token
+  }
+}
+
+mutation Signup($input: SignupInput!) {
+  signup(input: $input) {
+    token
+  }
+}
+
+mutation Logout {
+  logout
+}

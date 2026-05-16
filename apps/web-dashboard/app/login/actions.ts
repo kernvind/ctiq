@@ -2,8 +2,18 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { gql } from "graphql-request";
+import { graphqlClient } from "@/lib/graphql-client";
 
 export type LoginState = { error: string } | null;
+
+const LOGIN_MUTATION = gql`
+  mutation Login($input: LoginInput!) {
+    login(input: $input) {
+      token
+    }
+  }
+`;
 
 export async function login(
   _prevState: LoginState,
@@ -12,25 +22,20 @@ export async function login(
   const username = formData.get("username") as string;
   const password = formData.get("password") as string;
 
-  let response: Response;
+  let data: { login: { token: string } };
   try {
-    response = await fetch(`${process.env.BACKEND_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+    data = await graphqlClient.request(LOGIN_MUTATION, {
+      input: { username, password },
     });
-  } catch {
-    return { error: "Network error. Please try again." };
+  } catch (err: unknown) {
+    const message =
+      (err as { response?: { errors?: { message: string }[] } })?.response
+        ?.errors?.[0]?.message ?? "Login failed";
+    return { error: message };
   }
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    return { error: errorData.message || "Login failed" };
-  }
-
-  const data = await response.json();
   const cookieStore = await cookies();
-  cookieStore.set("token", data.token, {
+  cookieStore.set("token", data.login.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

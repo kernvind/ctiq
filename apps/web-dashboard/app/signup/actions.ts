@@ -2,8 +2,18 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { gql } from "graphql-request";
+import { graphqlClient } from "@/lib/graphql-client";
 
 export type SignupState = { error: string } | null;
+
+const SIGNUP_MUTATION = gql`
+  mutation Signup($input: SignupInput!) {
+    signup(input: $input) {
+      token
+    }
+  }
+`;
 
 export async function signup(
   _prevState: SignupState,
@@ -19,25 +29,20 @@ export async function signup(
     return { error: "Passwords do not match" };
   }
 
-  let response: Response;
+  let data: { signup: { token: string } };
   try {
-    response = await fetch(`${process.env.BACKEND_URL}/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password, name: name || undefined }),
+    data = await graphqlClient.request(SIGNUP_MUTATION, {
+      input: { username, email, password, name: name || undefined },
     });
-  } catch {
-    return { error: "Network error. Please try again." };
+  } catch (err: unknown) {
+    const message =
+      (err as { response?: { errors?: { message: string }[] } })?.response
+        ?.errors?.[0]?.message ?? "Signup failed";
+    return { error: message };
   }
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    return { error: errorData.message || "Signup failed" };
-  }
-
-  const data = await response.json();
   const cookieStore = await cookies();
-  cookieStore.set("token", data.token, {
+  cookieStore.set("token", data.signup.token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

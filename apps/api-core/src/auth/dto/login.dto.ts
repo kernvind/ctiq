@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { UserInputSchema } from '@repo/db';
 
-export const LoginSchema = UserInputSchema.pick({ username: true }).extend({
+export const LoginSchema = z.object({
+  username: z.string(),
   password: z.string().min(1),
 });
 
