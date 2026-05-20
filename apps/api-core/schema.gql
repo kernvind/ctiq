@@ -1,0 +1,29 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AuthPayload {
+  token: String!
+}
+
+input LoginInput {
+  password: String!
+  username: String!
+}
+
+type Mutation {
+  login(input: LoginInput!): AuthPayload!
+  logout: Boolean!
+  signup(input: SignupInput!): AuthPayload!
+}
+
+type Query {
+  health: String!
+}
+
+input SignupInput {
+  email: String!
+  name: String
+  password: String!
+  username: String!
+}

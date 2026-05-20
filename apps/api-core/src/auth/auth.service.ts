@@ -6,8 +6,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
 import { UsersService } from '../users/users.service';
-import type { LoginDto } from './dto/login.dto';
-import type { SignupDto } from './dto/signup.dto';
+import { LoginInput } from '@repo/graphql-types';
+import { SignupInput } from '@repo/graphql-types';
 @Injectable()
 export class AuthService {
   constructor(
@@ -15,13 +15,13 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(dto: LoginDto): Promise<{ token: string }> {
+  async login(dto: LoginInput): Promise<{ token: string }> {
     const user = await this.usersService.findByUsername(dto.username);
 
     if (!user || typeof dto.password !== 'string') {
       throw new UnauthorizedException('Invalid credentials');
     }
-
+    console.log('User found:', user);
     const passwordMatches = await compare(dto.password, user.passwordHash);
 
     if (!passwordMatches) {
@@ -40,10 +40,14 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
-  async signup(dto: SignupDto): Promise<{ token: string }> {
+  async signup(dto: SignupInput): Promise<{ token: string }> {
     const existingUser = await this.usersService.findByUsername(dto.username);
     if (existingUser) {
       throw new ConflictException('Username already exists');
+    }
+    const existingEmail = await this.usersService.findByEmail(dto.email);
+    if (existingEmail) {
+      throw new ConflictException('Email already exists');
     }
 
     const passwordHash = await hash(dto.password, 10);

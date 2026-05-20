@@ -2,31 +2,27 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { gql } from "graphql-request";
-import { graphqlClient } from "@/lib/graphql-client";
+import { sdk } from "@repo/generated-schemas-web";
+import { flattenZodErrors } from "@/lib/zod-errors";
+import { ZodLoginSchema } from "@repo/zod-validations";
 
 export type LoginState = { error: string } | null;
 
-const LOGIN_MUTATION = gql`
-  mutation Login($input: LoginInput!) {
-    login(input: $input) {
-      token
-    }
-  }
-`;
-
 export async function login(
   _prevState: LoginState,
-  formData: FormData
+  formData: FormData,
 ): Promise<LoginState> {
-  const username = formData.get("username") as string;
-  const password = formData.get("password") as string;
-
-  let data: { login: { token: string } };
+  const result = ZodLoginSchema.safeParse({
+    username: formData.get("username"),
+    password: formData.get("password"),
+  });
+  if (!result.success) {
+    return { error: flattenZodErrors(result.error) };
+  }
+  let token: string;
   try {
-    data = await graphqlClient.request(LOGIN_MUTATION, {
-      input: { username, password },
-    });
+    const data = await sdk.Login({ input: result.data });
+    token = data.login.token;
   } catch (err: unknown) {
     const message =
       (err as { response?: { errors?: { message: string }[] } })?.response
@@ -35,7 +31,7 @@ export async function login(
   }
 
   const cookieStore = await cookies();
-  cookieStore.set("token", data.login.token, {
+  cookieStore.set("token", token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

@@ -14,16 +14,22 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByUsername(username: string): Promise<UserRecord | null> {
-    return this.prisma.client.user.findUnique({ where: { username } });
+    return await this.prisma.client.user.findUnique({
+      where: { username },
+    });
   }
-
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    return await this.prisma.client.user.findUnique({
+      where: { email },
+    });
+  }
   async create(
     username: string,
     email: string,
     passwordHash: string,
     name?: string,
   ): Promise<UserRecord> {
-    return this.prisma.client.user.create({
+    return await this.prisma.client.user.create({
       data: { username, email, passwordHash, name },
     });
   }

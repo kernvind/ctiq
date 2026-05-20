@@ -4,6 +4,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "build:package": "turbo run build:package",
+    "generate:codegen": "turbo run generate:codegen",
+    "schema:generate": "turbo run schema:generate",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"

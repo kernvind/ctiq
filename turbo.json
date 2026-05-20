@@ -8,7 +8,8 @@
     "build": {
       "dependsOn": [
         "^build",
-        "^db:generate"
+        "^db:generate",
+        "^generate:codegen "
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -17,6 +18,34 @@
       "outputs": [
         ".next/**",
         "!.next/cache/**",
+        "dist/**"
+      ]
+    },
+    "build:package": {
+      "dependsOn": [
+        "^db:generate"
+      ],
+      "cache": false,
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "schema:generate": {
+      "dependsOn": [
+        "^schema:generate"
+      ],
+      "cache": false,
+      "outputs": [
+        "schema.gql"
+      ]
+    },
+    "generate:codegen": {
+      "dependsOn": [
+        "^schema:generate"
+      ],
+      "cache": false,
+      "outputs": [
+        "src/generated/**",
         "dist/**"
       ]
     },
@@ -32,13 +61,18 @@
     },
     "dev": {
       "dependsOn": [
-        "^db:generate"
+        "^db:generate",
+        "^generate:codegen",
+        "^build:package"
       ],
       "cache": false,
       "persistent": true
     },
     "db:generate": {
-      "cache": false
+      "cache": false,
+      "outputs": [
+        "src/generated/**"
+      ]
     },
     "db:migrate": {
       "cache": false
