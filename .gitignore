@@ -49,3 +49,53 @@ next-env.d.ts
 #prisma
 **/generated/prisma
 **/generated-graphql
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env.python
+Pipfile.lock
+poetry.lock
+
+# Python distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+sdist/
+.eggs/
+
+# Python testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+.pytype/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python tools
+.ruff_cache/
+
+# test files
+*.parquet
