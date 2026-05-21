@@ -9,7 +9,7 @@
       "dependsOn": [
         "^build",
         "^db:generate",
-        "^generate:codegen "
+        "^generate:codegen"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -62,7 +62,6 @@
     "dev": {
       "dependsOn": [
         "^db:generate",
-        "^generate:codegen",
         "^build:package"
       ],
       "cache": false,

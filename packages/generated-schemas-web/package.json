@@ -9,7 +9,6 @@
         "codegen": "graphql-codegen --config codegen.ts",
         "rmdist": "rimraf dist",
         "build": "graphql-codegen --config codegen.ts && rimraf dist && tsup",
-        "dev": "graphql-codegen --config codegen.ts && concurrently 'graphql-codegen --config codegen.ts --watch' 'tsup --watch'",
         "generate:codegen": "pnpm run codegen && pnpm run build",
         "lint": "eslint"
     },
