@@ -1,27 +1,11 @@
 """
 Extract task: fetch studies from the clinicalTrials.gov v2 REST API.
-
-Parallelization strategy
-------------------------
-The API uses cursor-based pagination so sequential pages cannot be
-fetched truly in parallel.  Instead we split the requested date range
-into N equal-width windows (default 90 days each) and issue one
-independent paginated fetch per window.  All windows are submitted as
-Dask *delayed* tasks and computed concurrently on a thread pool, giving
-us N-way parallelism with minimal overhead.
-
-Each delayed task returns a list of raw study dicts (the JSON
-`protocolSection` plus the top-level `nctId`).  The caller collects and
-flattens the results.
 """
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
-from typing import Optional
-
-from dask.base import compute
-from dask.delayed import delayed
+from datetime import date
+from typing import Iterator, Optional
 import requests
 from requests.exceptions import HTTPError, RequestException
 from tenacity import (
@@ -37,16 +21,6 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-
-def _date_chunks(start: date, end: date, chunk_days: int) -> list[tuple[date, date]]:
-    """Split [start, end] into consecutive chunks of at most *chunk_days* days."""
-    chunks: list[tuple[date, date]] = []
-    cursor = start
-    while cursor <= end:
-        chunk_end = min(cursor + timedelta(days=chunk_days - 1), end)
-        chunks.append((cursor, chunk_end))
-        cursor = chunk_end + timedelta(days=1)
-    return chunks
 
 
 @retry(
@@ -75,17 +49,10 @@ def _fetch_page(
     return resp.json()
 
 
-# ── Dask delayed worker ────────────────────────────────────────────────────────
-
-
-@delayed
-def _fetch_chunk(start: date, end: date) -> list[dict]:
+def extract_studies_streaming(start: date, end: date) -> Iterator[list[dict]]:
     """
     Fetch every page of studies whose lastUpdatePostDate falls in
-    [start, end].  Returns a flat list of raw study dicts.
-
-    This function is executed by Dask worker threads; each call is fully
-    independent so there are no shared-state issues.
+    [start, end].  Yields batches of raw study dicts.
     """
     date_filter = f"AREA[LastUpdatePostDate]RANGE[{start.isoformat()},{end.isoformat()}]"
     studies: list[dict] = []
@@ -108,54 +75,13 @@ def _fetch_chunk(start: date, end: date) -> list[dict]:
                 len(page_studies),
                 len(studies),
             )
-
+            if page_num >= settings.ct_api_max_loop:
+                page_num = 0
+                yield studies
+                studies = []
             page_token = data.get("nextPageToken")
             if not page_token:
+                if studies:
+                    yield studies
                 break
 
-    return studies
-
-
-# ── Public API (called by the Prefect flow) ────────────────────────────────────
-
-
-from typing import Iterator
-
-
-def extract_studies_streaming(
-    from_date: date,
-    to_date: date,
-    parallelism: int | None = None,
-) -> Iterator[list[dict]]:
-    """
-    Yield one date-range chunk's studies at a time.
-
-    Up to *parallelism* chunks are fetched concurrently (Dask thread pool)
-    before yielding, so API throughput is preserved while memory is bounded
-    to at most *parallelism* × (one chunk's raw studies) at any moment.
-
-    This replaces the old ``extract_studies_parallel`` for full-load runs
-    where loading all studies at once would exhaust RAM.
-    """
-    all_chunks = _date_chunks(from_date, to_date, settings.date_range_chunk_days)
-    n_workers = parallelism or settings.dask_n_workers
-    logger.info(
-        "Streaming %d date-range chunks (%d days each, parallelism=%d) from %s to %s",
-        len(all_chunks),
-        settings.date_range_chunk_days,
-        n_workers,
-        from_date,
-        to_date,
-    )
-
-    for batch_start in range(0, len(all_chunks), n_workers):
-        batch = all_chunks[batch_start : batch_start + n_workers]
-        delayed_tasks = [_fetch_chunk(start, end) for start, end in batch]
-        results: tuple[list[dict], ...] = compute(
-            *delayed_tasks,
-            scheduler="threads",
-            num_workers=len(batch),
-        )
-        for chunk_result in results:
-            logger.debug("Yielding chunk with %d studies", len(chunk_result))
-            yield chunk_result

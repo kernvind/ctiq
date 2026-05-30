@@ -29,22 +29,21 @@ from __future__ import annotations
 
 import argparse
 import uuid
-from datetime import date, timedelta
-from typing import Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Iterable, Optional
 
 from google.cloud import bigquery
 from prefect import flow, get_run_logger, task
 from prefect.tasks import exponential_backoff
 
 from src.config import settings
-from src.tasks.embed import (
-    generate_trial_chunks,
-    upload_embeddings_chunk_to_gcs,
-    bq_load_embeddings,
-)
+from src.schemas.tables import EMBEDDING_TABLE_CONFIG, TABLE_CONFIGS
+from src.set_logger import configure_logging
 from src.tasks.extract import extract_studies_streaming
-from src.tasks.load import upload_trials_chunk_to_gcs, bq_load_trials
-from src.tasks.transform import transform_studies
+from src.tasks.load.gcs_load import upload_embeddings_batch, upload_studies_batch
+from src.tasks.load.bq import load_batch_to_bigquery
+from src.tasks.transform.embed import TrialEmbedder
+from src.tasks.transform.transform_studies import transform_studies
 
 # ── Prefect tasks ──────────────────────────────────────────────────────────────
 
@@ -85,31 +84,29 @@ def transform_task(raw_studies: list[dict]):
     retries=2,
     retry_delay_seconds=exponential_backoff(backoff_factor=2),
 )
-def upload_trials_chunk_task(trials, run_id: str, chunk_idx: int) -> int:
-    upload_trials_chunk_to_gcs(trials, run_id, chunk_idx)
+def gcs_upload_trials_chunk_task(trials, run_id: str, chunk_idx: int, ingested_at: date) -> int:
+    upload_studies_batch(transformed_studies=trials, bucket_name=settings.gcs_bucket, chunk_idx=chunk_idx, prefix=settings.gcs_prefix, batch_id=run_id, ingestion_date=ingested_at)
     return len(trials)
-
-
-@task(
-    name="generate-embeddings",
-    retries=2,
-    retry_delay_seconds=exponential_backoff(backoff_factor=2),
-)
-def generate_embeddings_task(trials):
-    logger = get_run_logger()
-    chunks = generate_trial_chunks(trials)
-    logger.info("Generated %d embedding chunks from %d trials", len(chunks), len(trials))
-    return chunks
-
 
 @task(
     name="upload-embeddings-chunk",
     retries=2,
     retry_delay_seconds=exponential_backoff(backoff_factor=2),
 )
-def upload_embeddings_chunk_task(chunks, run_id: str, chunk_idx: int) -> int:
-    upload_embeddings_chunk_to_gcs(chunks, run_id, chunk_idx)
-    return len(chunks)
+def gcs_upload_embeddings_chunk_task(embeddings, run_id: str, chunk_idx: int, ingested_at: date) -> int:
+    upload_embeddings_batch(embeddings=embeddings, bucket_name=settings.gcs_bucket, chunk_idx=chunk_idx, prefix=settings.gcs_embeddings_prefix, batch_id=run_id, ingestion_date=ingested_at)
+    return len(embeddings)
+
+
+@task(
+    name="embeddings-chunk",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def embeddings_chunk_task(transformed_studies: Iterable[dict]) -> list[dict]:
+    embedder = TrialEmbedder()
+    embeddings = embedder.embed_trials(transformed_studies)
+    return embeddings
 
 
 @task(
@@ -117,11 +114,16 @@ def upload_embeddings_chunk_task(chunks, run_id: str, chunk_idx: int) -> int:
     retries=2,
     retry_delay_seconds=exponential_backoff(backoff_factor=2),
 )
-def bq_load_trials_task(run_id: str, write_disposition: str) -> Optional[int]:
-    logger = get_run_logger()
-    rows = bq_load_trials(run_id, write_disposition)  # type: ignore[arg-type]
-    logger.info("Loaded %d rows → %s  (disposition=%s)", rows, settings.bq_full_table_id, write_disposition)
-    return rows
+def bq_load_trials_task(run_id: str, ingestion_date: date) -> Optional[int]:
+    load_batch_to_bigquery(
+        bucket=settings.gcs_bucket,
+        prefix=settings.gcs_prefix,
+        ingestion_date=ingestion_date,
+        batch_id=run_id,
+        project=settings.gcp_project_id,
+        dataset=settings.bq_dataset,
+        table_configs=TABLE_CONFIGS,
+    )
 
 
 @task(
@@ -129,11 +131,16 @@ def bq_load_trials_task(run_id: str, write_disposition: str) -> Optional[int]:
     retries=2,
     retry_delay_seconds=exponential_backoff(backoff_factor=2),
 )
-def bq_load_embeddings_task(run_id: str, write_disposition: str) -> Optional[int]:
-    logger = get_run_logger()
-    rows = bq_load_embeddings(run_id, write_disposition)  # type: ignore[arg-type]
-    logger.info("Loaded %d embedding rows → %s.%s", rows, settings.bq_dataset, settings.bq_embeddings_table)
-    return rows
+def bq_load_embeddings_task(run_id: str, ingestion_date: date) -> Optional[int]:
+    load_batch_to_bigquery(
+        bucket=settings.gcs_bucket,
+        prefix=settings.gcs_embeddings_prefix,
+        ingestion_date=ingestion_date,
+        batch_id=run_id,
+        project=settings.gcp_project_id,
+        dataset=settings.bq_dataset,
+        table_configs=EMBEDDING_TABLE_CONFIG,
+    )
 
 
 # ── Main flow ──────────────────────────────────────────────────────────────────
@@ -153,14 +160,12 @@ def clinical_trials_etl_flow(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     skip_embeddings: bool = False,
-) -> dict:
+):
     """
     Parameters
     ----------
     full_load:
-        ``True`` → WRITE_TRUNCATE both staging tables and reload from
         ``from_date`` (default 2000-01-01).
-        ``False`` (default) → incremental append since the BQ watermark.
     from_date:
         ISO date ``YYYY-MM-DD``.  Overrides the watermark / default start.
     to_date:
@@ -168,19 +173,13 @@ def clinical_trials_etl_flow(
     skip_embeddings:
         Set ``True`` to only load trial data without generating embeddings
         (useful for quick backfills or debugging).
-
-    Returns
-    -------
-    dict with keys ``trials_loaded`` and ``embedding_rows_loaded``.
     """
     logger = get_run_logger()
 
     # ── Resolve date window ────────────────────────────────────────────────────
     end: date = date.fromisoformat(to_date) if to_date else date.today()
-
     if full_load:
         start: date = date.fromisoformat(from_date) if from_date else date(2000, 1, 1)
-        write_disposition = "WRITE_TRUNCATE"
         logger.info("Mode: FULL LOAD  |  %s → %s", start, end)
     else:
         if from_date:
@@ -188,14 +187,13 @@ def clinical_trials_etl_flow(
         else:
             watermark = get_watermark()
             start = (watermark + timedelta(days=1)) if watermark else (end - timedelta(days=30))
-        write_disposition = "WRITE_APPEND"
         logger.info("Mode: INCREMENTAL  |  %s → %s", start, end)
 
     if start > end:
         logger.info("start (%s) > end (%s) — nothing to do", start, end)
         return {"trials_loaded": 0, "embedding_rows_loaded": 0}
 
-    run_id = f"{end.isoformat()}_{write_disposition.lower()}_{uuid.uuid4().hex[:8]}"
+    run_id = f"{start.isoformat()}_{end.isoformat()}_{uuid.uuid4().hex[:8]}"
 
     # ── Stages 1 & 2: Stream one date-range chunk at a time ───────────────────
     # Each chunk (~90 days of studies) is extracted, transformed, serialised to
@@ -204,37 +202,30 @@ def clinical_trials_etl_flow(
     # no longer risk OOM.  A single BQ load job runs after all chunks are done.
     total_trials = 0
     total_embedding_chunks = 0
-
+    ingested_at = datetime.now(timezone.utc).date()
     for chunk_idx, raw_chunk in enumerate(extract_studies_streaming(start, end)):
         trials = transform_task(raw_chunk)
-        uploaded = upload_trials_chunk_task(trials, run_id, chunk_idx)
+        uploaded = gcs_upload_trials_chunk_task(trials, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
         total_trials += uploaded
-
         if not skip_embeddings:
-            emb_chunks = generate_embeddings_task(trials)
-            uploaded_emb = upload_embeddings_chunk_task(emb_chunks, run_id, chunk_idx)
-            total_embedding_chunks += uploaded_emb
+            embeddings = embeddings_chunk_task(trials)
+            gcs_upload_embeddings_chunk_task(embeddings, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
+            total_embedding_chunks += len(embeddings)
 
     if skip_embeddings:
         logger.info("Skipping embedding generation (--skip-embeddings)")
 
     # ── Stage 3: Single BQ load per table ─────────────────────────────────────
-    trials_loaded = bq_load_trials_task(run_id, write_disposition) if total_trials else 0
+    bq_load_trials_task(run_id, ingested_at) if total_trials else 0
 
-    embedding_rows_loaded = 0
     if not skip_embeddings and total_embedding_chunks:
-        embedding_rows_loaded = bq_load_embeddings_task(run_id, write_disposition)
+        bq_load_embeddings_task(run_id, ingested_at)
 
-    result = {
-        "trials_loaded": trials_loaded,
-        "embedding_rows_loaded": embedding_rows_loaded,
-    }
-    logger.info("Flow complete: %s  |  run_id=%s", result, run_id)
-    return result
+    logger.info("Flow complete: run_id=%s", run_id)
 
 
 # ── CLI entry-point ────────────────────────────────────────────────────────────
-
+configure_logging(settings)  # Must be called at the module level to set up logging for all tasks and flows
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the clinical trials ETL flow locally.")
     parser.add_argument(

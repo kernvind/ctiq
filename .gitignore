@@ -37,6 +37,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+app.log
+error.log
 
 # Misc
 .DS_Store

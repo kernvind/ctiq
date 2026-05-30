@@ -26,6 +26,11 @@ ctiq-etl-skip-embeddings:
 ## Test run for a specific date window, skipping embeddings. Usage: make ctiq-etl-test-run FROM=2024-01-15 [TO=2024-01-15]
 ctiq-etl-test-run:
 	cd $(PIPELINES_ETL_DIR) && $(POETRY) run python -m src.flows.clinical_trials_flow \
+		--from-date $(FROM) --to-date $(TO)
+
+## Test run for a specific date window, skipping embeddings. Usage: make ctiq-etl-test-run FROM=2024-01-15 [TO=2024-01-15]
+ctiq-etl-test-run-skip-embeddings:
+	cd $(PIPELINES_ETL_DIR) && $(POETRY) run python -m src.flows.clinical_trials_flow \
 		--from-date $(FROM) --to-date $(TO) --skip-embeddings
 
 ## Deploy the Prefect flow (daily at 02:00 UTC).
