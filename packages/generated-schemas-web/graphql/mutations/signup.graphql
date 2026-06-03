@@ -1,0 +1,5 @@
+mutation signup_mutation($input: SignupInput!) {
+  signup(input: $input) {
+    token
+  }
+}

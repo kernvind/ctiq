@@ -21,9 +21,10 @@ export async function login(
   }
   let token: string;
   try {
-    const data = await sdk.Login({ input: result.data });
+    const data = await sdk.login_mutation({ input: result.data });
     token = data.login.token;
   } catch (err: unknown) {
+    console.log("Login error:", err);
     const message =
       (err as { response?: { errors?: { message: string }[] } })?.response
         ?.errors?.[0]?.message ?? "Login failed";

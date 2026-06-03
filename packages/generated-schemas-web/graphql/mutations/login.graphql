@@ -1,0 +1,5 @@
+mutation login_mutation($input: LoginInput!) {
+  login(input: $input) {
+    token
+  }
+}

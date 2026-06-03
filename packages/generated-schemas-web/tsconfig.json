@@ -18,7 +18,8 @@
     "experimentalDecorators": true // ← must be true
   },
   "include": [
-    "src"
+    "src",
+    "generate-operations.ts"
   ],
   "exclude": [
     "node_modules",

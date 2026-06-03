@@ -31,7 +31,7 @@ export async function signup(
 
   let token: string;
   try {
-    const data = await sdk.Signup({
+    const data = await sdk.signup_mutation({
       input: { username, email, password, name: name || undefined },
     });
     token = data.signup.token;

@@ -1,17 +1,40 @@
 import { join } from 'node:path';
 import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { HttpModule } from '@nestjs/axios';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { TrialSearchModule } from './trial-search/trial-search.module';
 import { HealthResolver } from './health/health.resolver';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-
+import { APP_FILTER } from '@nestjs/core';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 @Module({
   imports: [
+    // 1. Initialize global configuration management first
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
+    // 2. Safely bootstrap HttpModule using the global ConfigService
+    HttpModule.registerAsync({
+      useFactory: (configService: ConfigService) => ({
+        timeout: configService.get<number>('HTTP_TIMEOUT', 5000),
+      }),
+      inject: [ConfigService],
+    }),
+
+    // 3. Database module resolves next using lazy imports internally
     PrismaModule,
+
     AuthModule,
+    TrialSearchModule,
+
+    // 4. GraphQL gateway setup
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       autoSchemaFile: join(process.cwd(), 'schema.gql'),
@@ -19,6 +42,13 @@ import { AppService } from './app.service';
     }),
   ],
   controllers: [AppController],
-  providers: [AppService, HealthResolver],
+  providers: [
+    AppService,
+    HealthResolver,
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+  ],
 })
 export class AppModule {}
