@@ -2,7 +2,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from src.config import Settings
+from src.app.core.config import Settings
 
 _CONFIGURED = False
 
@@ -52,5 +52,16 @@ def configure_logging(config: Settings) -> None:
     root.addHandler(app_handler)
     root.addHandler(error_handler)
     root.addHandler(console_handler)
+        # Quiet third-party loggers that emit at INFO too aggressively
+    _NOISY_LOGGERS = (
+        "httpx",                  # HTTP client used by HF Hub, OpenAI, etc.
+        "httpcore",               # underlies httpx; same noise class
+        "urllib3",                # used by google-cloud-* and others
+        "huggingface_hub",        # model download/cache chatter
+        "sentence_transformers",  # model load info we don't care about per-call
+        "filelock",               # lock acquire/release noise
+    )
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
     _CONFIGURED = True

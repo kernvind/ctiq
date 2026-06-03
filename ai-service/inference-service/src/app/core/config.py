@@ -1,11 +1,9 @@
 from typing import Optional
-
+from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 class Settings(BaseSettings):
     LOGDIR: str = './logs'
-    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -16,34 +14,19 @@ class Settings(BaseSettings):
     gcp_project_id: str = "data-eng-470620"
     bq_dataset: str = "healthcare_ai"
     bq_staging_table: str = "clinical_trials_gov"
+    bq_embeddings_table: str = "clinical_trials_embeddings"
+    bq_locations_table: str =     "clinical_trials_locations"
+    bq_mesh_terms_table: str =    "clinical_trials_mesh_terms"
+    bq_arm_groups_table: str =    "clinical_trials_arm_groups"
+    bq_interventions_table: str = "clinical_trials_interventions"
+    bq_outcomes_table: str =      "clinical_trials_outcomes"
+    bq_officials_table: str =     "clinical_trials_officials"
     google_application_credentials: Optional[str] = None
+    vector_search_oversample_factor: int = 3
 
     # ── clinicalTrials.gov v2 API ─────────────────────────────────────────────
-    ct_api_base_url: str = "https://clinicaltrials.gov/api/v2"
-    ct_api_page_size: int = 1000
-    ct_api_max_loop: int = 100 # Max pages to yield trials i.e 1000 * 100 (ct_api_page_size * ct_api_max_loop)
-    embedding_max_chunks: int = 10 # Max number of embedding chunks
-    embedding_max_records: int = 1000
-    ct_api_max_retries: int = 5
     ct_api_overall_statuses: str = "ENROLLING_BY_INVITATION,RECRUITING,ACTIVE_NOT_RECRUITING,COMPLETED"
 
-    # ── Parallelism ───────────────────────────────────────────────────────────
-    # Number of Dask worker threads for concurrent API calls
-    dask_n_workers: int = 8
-    # Each Dask task covers this many days of lastUpdatePostDate range
-    date_range_chunk_days: int = 90
-
-    bq_embeddings_table: str = "clinical_trials_embeddings"
-
-    # ── GCS staging ───────────────────────────────────────────────────────────
-    # Parquet files are written here before the BQ load jobs read them
-    gcs_bucket: str = "bitziv_health_data"
-    # Trial data Parquet files land under this prefix
-    gcs_prefix: str = "clinical_trials"
-    # Embedding Parquet files land under this separate prefix
-    gcs_embeddings_prefix: str = "clinical_trials_embeddings"
-    
-    embedding_max_sequence_length: int = 8192
 
     # ── HuggingFace embeddings ────────────────────────────────────────────────
     # sentence-transformers model; runs locally, no API key required.
@@ -51,27 +34,33 @@ class Settings(BaseSettings):
     # Requires trust_remote_code=True.  Uses task prefixes:
     #   "search_document:" at index time, "search_query:" at query time.
     embedding_model_name: str = "nomic-ai/nomic-embed-text-v1.5"
-    # 8192-token window → 6000-char chunks keep most trials in 1-2 chunks.
-    embedding_chunk_size: int = 6000
-    embedding_chunk_overlap: int = 600
-    # 137 MB model; batch 32 is safe on CPU, raise to 64+ on GPU.
-    embedding_batch_size: int = 32
 
     @property
     def bq_full_table_id(self) -> str:
         return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_staging_table}"
-
+    @property
+    def bq_full_locations_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_locations_table}"
+    @property
+    def bq_full_mesh_terms_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_mesh_terms_table}"
+    @property
+    def bq_full_arm_groups_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_arm_groups_table}"
+    @property
+    def bq_full_interventions_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_interventions_table}"
+    @property
+    def bq_full_outcomes_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_outcomes_table}"
+    @property
+    def bq_full_officials_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_officials_table}"
     @property
     def bq_embeddings_table_id(self) -> str:
         return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_embeddings_table}"
 
-    @property
-    def gcs_base_uri(self) -> str:
-        return f"gs://{self.gcs_bucket}/{self.gcs_prefix}"
 
-    @property
-    def gcs_embeddings_uri(self) -> str:
-        return f"gs://{self.gcs_bucket}/{self.gcs_embeddings_prefix}"
-
-
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
