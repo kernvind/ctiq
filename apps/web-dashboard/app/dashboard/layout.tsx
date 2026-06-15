@@ -1,4 +1,5 @@
 import { DashboardNav } from "@/components/dashboard-nav";
+import { BottomTabBar } from "@/components/bottom-tab-bar";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -6,7 +7,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <header className="border-b px-6 py-3 flex items-center justify-between gap-4">
         <div className="flex items-center gap-6">
           <span className="text-sm font-semibold">CTIQ Health</span>
-          <DashboardNav />
+          <div className="hidden md:flex">
+            <DashboardNav />
+          </div>
         </div>
         <form action="/api/logout" method="POST">
           <button
@@ -17,7 +20,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </form>
       </header>
-      <main className="flex-1">{children}</main>
+
+      <main className="flex-1 pb-16 md:pb-0">{children}</main>
+
+      <BottomTabBar />
     </div>
   );
 }
