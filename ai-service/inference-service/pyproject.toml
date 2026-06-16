@@ -20,6 +20,9 @@ dependencies = [
 [tool.poetry]
 packages = [{include = "src"}]
 
+[tool.poetry.dependencies]
+ctiq-db = {path = "../../py-packages/ctiq-db", develop = true}
+
 [tool.poetry.scripts]
 start_dev = "src.manage:start_dev"
 

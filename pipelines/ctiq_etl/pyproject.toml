@@ -43,6 +43,9 @@ description = "Clinical trials ETL pipeline"
 # This tells Poetry: "Look in the 'src' folder for my package code"
 packages = [{include = "src"}]
 
+[tool.poetry.dependencies]
+ctiq-db = {path = "../../py-packages/ctiq-db", develop = true}
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,21 @@
+[project]
+name = "ctiq-db"
+version = "0.1.0"
+description = "Shared PostgreSQL ORM models and Alembic migrations for ctiq Python services"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy>=2.0.0",
+    "pgvector>=0.3.0",
+    "alembic>=1.13.0",
+    "psycopg[binary]>=3.1.0",
+]
+
+[tool.poetry]
+name = "ctiq-db"
+version = "0.1.0"
+description = "Shared PostgreSQL ORM models and Alembic migrations for ctiq Python services"
+packages = [{include = "ctiq_db", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
