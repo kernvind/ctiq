@@ -1,0 +1,38 @@
+# Local development only — not used in production (K8s handles that).
+# Run from repo root: docker compose -f ai-service/inference-service/docker-compose.yml up
+#
+# Joins the postgres_db network defined in /Users/baljotsingh/docker/postgres/docker-compose.yml
+# so the service reaches Postgres directly by container name, no host.docker.internal needed.
+
+services:
+  inference-service:
+    build:
+      context: ../.. # repo root — matches the Dockerfile's expected build context
+      dockerfile: ai-service/inference-service/Dockerfile
+    image: ctiq-inference:local
+    ports:
+      - "8000:8000"
+    environment:
+      - PG_DATABASE_URL=${PG_DATABASE_URL}
+      - HF_TOKEN=${HF_TOKEN} # value comes from .env file, never hardcoded here
+    volumes:
+      # Live code reload — host source shadows the baked-in copy in the image.
+      - ./src:/app/ai-service/inference-service/src
+      - ../../py-packages/ctiq-db/src:/app/py-packages/ctiq-db/src
+      # Reuse host HF cache — avoids re-downloading model weights inside the container.
+      - ~/.cache/huggingface:/app/ai-service/inference-service/.hf-cache:ro
+    command:
+      - uvicorn
+      - src.app.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --reload
+      - --reload-dir=/app/ai-service/inference-service/src
+      - --reload-dir=/app/py-packages/ctiq-db/src
+    networks:
+      - postgres_db
+    restart: unless-stopped
+
+networks:
+  postgres_db:
+    external: true # already created by the postgres docker-compose

@@ -34,7 +34,9 @@ export async function login(
   const cookieStore = await cookies();
   cookieStore.set("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // COOKIE_SECURE=true only when serving over HTTPS (staging/prod).
+    // NODE_ENV=production is not the right signal — Docker local is HTTP.
+    secure: process.env.COOKIE_SECURE === "true",
     sameSite: "lax",
     path: "/",
   });

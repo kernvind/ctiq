@@ -1,0 +1,39 @@
+# Local testing only — not used in production (K8s handles that).
+# Run from repo root: docker compose -f apps/web-dashboard/docker-compose.yml up --build
+#
+# Two kinds of env vars:
+#   NEXT_PUBLIC_* — baked into the JS bundle at build time (browser-visible).
+#                   Must be set before building the image.
+#   BACKEND_URL   — runtime only, used by Next.js server-side code.
+#                   Uses the Docker service name so it never leaves the network.
+#
+# Copy apps/web-dashboard/.env.example to apps/web-dashboard/.env and fill in values.
+# Docker Compose reads .env automatically from the same directory as this file.
+
+services:
+  web-dashboard:
+    build:
+      context: ../..
+      dockerfile: apps/web-dashboard/Dockerfile
+      args:
+        # Browser-facing GraphQL URL — baked at build time.
+        # In local Docker: keep localhost so the browser can reach api-core via
+        # the published port 3001. Change to a real domain for staging/prod builds.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/graphql}
+    image: ctiq-web-dashboard:local
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      # Server-side URL — resolved inside Docker via service name, never hits the host.
+      - BACKEND_URL=http://api-core:3001
+      # false for local HTTP; set to true in production (HTTPS) deployments.
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+    networks:
+      - postgres_db # shared with api-core so service-name DNS resolves
+    restart: unless-stopped
+
+networks:
+  postgres_db:
+    external: true # created by the postgres docker-compose

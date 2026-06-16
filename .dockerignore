@@ -1,0 +1,38 @@
+# Version control
+.git/
+.gitignore
+
+# Installed dependencies — rebuilt inside Docker
+**/node_modules/
+
+# Python virtual environments
+**/.venv/
+
+# Python artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Credentials — must never enter the image
+**/.env
+**/.env.*
+
+# Logs
+**/logs/
+**/*.log
+
+# Test artifacts
+**/coverage/
+**/.coverage
+**/htmlcov/
+
+# IDE
+.idea/
+.vscode/
+**/*.swp
+
+# Next.js build cache
+**/.next/cache/

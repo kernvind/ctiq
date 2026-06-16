@@ -1,0 +1,35 @@
+# Local testing only — not used in production (K8s handles that).
+# Run from repo root: docker compose -f apps/api-core/docker-compose.yml up --build
+#
+# Prerequisites:
+#   1. postgres_db network must exist:
+#      docker compose -f /Users/baljotsingh/docker/postgres/docker-compose.yml up -d
+#   2. Set JWT_SECRET in your shell or apps/api-core/.env
+
+services:
+  api-core:
+    build:
+      context: ../.. # repo root — matches the Dockerfile's expected build context
+      dockerfile: apps/api-core/Dockerfile
+    image: ctiq-api-core:local
+    ports:
+      - '3001:3001'
+    environment:
+      - PORT=3001
+      - DATABASE_URL=postgresql://bitziv_user:S3cret@postgres:5432/bitziv_db?schema=public
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-8h}
+      # Points to the inference service container on the shared network.
+      # If the inference service isn't running, set this to http://localhost:8000.
+      - SEARCH_API_URL=http://inference-service:8000
+      - SEARCH_API_TOKEN=${SEARCH_API_TOKEN:-test-token}
+      - FAST_API_VERSION_V1=${FAST_API_VERSION_V1:-/api/v1}
+      - FAST_API_VERSION_V2=${FAST_API_VERSION_V2:-/api/v2}
+      - FAST_API_SEARCH_TRIAL_PATH=${FAST_API_SEARCH_TRIAL_PATH:-/search/trials}
+    networks:
+      - postgres_db
+    restart: unless-stopped
+
+networks:
+  postgres_db:
+    external: true # already created by the postgres docker-compose
