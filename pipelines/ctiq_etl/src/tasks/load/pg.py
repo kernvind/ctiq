@@ -100,10 +100,14 @@ def upsert_trials(
                 conn.execute(delete(model).where(model.nct_id.in_(nct_ids)))
                 for batch in _batched(child_rows[key], _BATCH_SIZE):
                     conn.execute(pg_insert(model).values(batch))
+                logger.info(
+                    "Postgres: replaced or inserted %d rows for %s, children for %d nct_ids",
+                    len(child_rows[key]), model.__tablename__, len(nct_ids),
+                )
 
         logger.info(
-            "Postgres: upserted %d trials, replaced children for %d nct_ids",
-            len(trial_rows), len(nct_ids),
+            "Postgres: upserted %d trials",
+            len(trial_rows),
         )
     finally:
         engine.dispose()
@@ -137,7 +141,7 @@ def upsert_embeddings(
                 conn.execute(pg_insert(TrialEmbedding).values(batch))
 
         logger.info(
-            "Postgres: replaced embeddings for %d nct_ids (%d rows)",
+            "Postgres: replaced or inserted embeddings for %d nct_ids (%d rows)",
             len(nct_ids), len(embeddings),
         )
     finally:
