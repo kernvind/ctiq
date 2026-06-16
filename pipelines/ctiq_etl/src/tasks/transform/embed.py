@@ -148,6 +148,9 @@ class TrialEmbedder:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         logger.info("Loading embedding model %s on %s", model_name, device)
+        # GPU memory is batch_size × seq_len² sensitive — stay conservative at 8192 tokens
+        _default_batch = {"cuda": 8, "mps": 16, "cpu": 32}
+        self._default_batch_size = _default_batch.get(device, 32)
         self.model = SentenceTransformer(
             model_name,
             trust_remote_code=True,
@@ -205,23 +208,30 @@ class TrialEmbedder:
         transformed_studies: Iterable[dict],
         batch_size: int = settings.embedding_batch_size,
         show_progress: bool = False,
+        skip_existing_check: bool = False,
     ) -> list[dict]:
         """Convenience: extract chunks from each study and embed them all."""
         all_chunks: list[EmbeddingChunk] = []
         nct_ids = set()
+        batch_size =  self._default_batch_size or batch_size
         for transformed in transformed_studies:
             if not transformed:
                 continue
             nct_ids.add(transformed.get("trial", {}).get("nct_id", ""))
             all_chunks.extend(extract_chunks(transformed))
-        existing_embeddings = get_existing_embeddings_hash(nct_ids=list(nct_ids))
-        to_embed = []
-        for chunk in all_chunks:
-            key = (chunk.nct_id, chunk.field_type, chunk.chunk_id)
-            if existing_embeddings.get(key) == _hash_text(chunk.chunk_text):
-                logger.info("Skipping embedding for %s (unchanged since last run)", key)
-                continue
-            to_embed.append(chunk)
+
+        if skip_existing_check:
+            to_embed = all_chunks
+        else:
+            existing_embeddings = get_existing_embeddings_hash(nct_ids=list(nct_ids))
+            to_embed = []
+            for chunk in all_chunks:
+                key = (chunk.nct_id, chunk.field_type, chunk.chunk_id)
+                if existing_embeddings.get(key) == _hash_text(chunk.chunk_text):
+                    logger.info("Skipping embedding for %s (unchanged since last run)", key)
+                    continue
+                to_embed.append(chunk)
+
         return self.embed_chunks(
             to_embed,
             batch_size=batch_size,
