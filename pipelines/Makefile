@@ -2,8 +2,10 @@
 PIPELINES_ETL_DIR := ctiq_etl
 POETRY           := poetry
 
-FROM ?=
-TO   ?= $(FROM)
+FROM                ?=
+TO                  ?= $(FROM)
+SKIP_EXISTING_CHECK ?=
+_SKIP_EXISTING_FLAG  = $(if $(SKIP_EXISTING_CHECK),--skip-existing-check,)
 
 .PHONY: ctiq-etl-install ctiq-etl-run ctiq-etl-full-load ctiq-etl-skip-embeddings ctiq-etl-test-run ctiq-etl-deploy ctiq-etl-lint
 
@@ -23,10 +25,10 @@ ctiq-etl-full-load:
 ctiq-etl-skip-embeddings:
 	cd $(PIPELINES_ETL_DIR) && $(POETRY) run python -m src.flows.clinical_trials_flow --skip-embeddings
 
-## Test run for a specific date window, skipping embeddings. Usage: make ctiq-etl-test-run FROM=2024-01-15 [TO=2024-01-15]
+## Test run for a specific date window. Usage: make ctiq-etl-test-run FROM=2024-01-15 [TO=2024-01-15] [SKIP_EXISTING_CHECK=1]
 ctiq-etl-test-run:
 	cd $(PIPELINES_ETL_DIR) && $(POETRY) run python -m src.flows.clinical_trials_flow \
-		--from-date $(FROM) --to-date $(TO)
+		--from-date $(FROM) --to-date $(TO) $(_SKIP_EXISTING_FLAG)
 
 ## Test run for a specific date window, skipping embeddings. Usage: make ctiq-etl-test-run FROM=2024-01-15 [TO=2024-01-15]
 ctiq-etl-test-run-skip-embeddings:
