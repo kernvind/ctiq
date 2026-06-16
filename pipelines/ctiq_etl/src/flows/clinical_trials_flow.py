@@ -30,7 +30,7 @@ from __future__ import annotations
 import argparse
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import Iterable, Optional
+from typing import Optional
 
 from google.cloud import bigquery
 from prefect import flow, get_run_logger, task
@@ -42,6 +42,7 @@ from src.set_logger import configure_logging
 from src.tasks.extract import extract_studies_streaming
 from src.tasks.load.gcs_load import upload_embeddings_batch, upload_studies_batch
 from src.tasks.load.bq import load_batch_to_bigquery
+from src.tasks.load.pg import upsert_trials, upsert_embeddings
 from src.tasks.transform.embed import TrialEmbedder
 from src.tasks.transform.transform_studies import transform_studies
 
@@ -103,10 +104,48 @@ def gcs_upload_embeddings_chunk_task(embeddings, run_id: str, chunk_idx: int, in
     retries=2,
     retry_delay_seconds=exponential_backoff(backoff_factor=2),
 )
-def embeddings_chunk_task(transformed_studies: Iterable[dict]) -> list[dict]:
+def embeddings_chunk_task(
+    transformed_studies: list[dict],
+    skip_existing_check: bool = False,
+    trial_batch_size: int = settings.embedding_trial_batch_size,
+) -> list[dict]:
     embedder = TrialEmbedder()
-    embeddings = embedder.embed_trials(transformed_studies)
-    return embeddings
+    all_embeddings: list[dict] = []
+    for i in range(0, len(transformed_studies), trial_batch_size):
+        sub_batch = transformed_studies[i : i + trial_batch_size]
+        rows = embedder.embed_trials(sub_batch, skip_existing_check=skip_existing_check)
+        all_embeddings.extend(rows)
+    return all_embeddings
+
+
+@task(
+    name="pg-upsert-trials",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def pg_upsert_trials_task(trials: list[dict], ingestion_date: date, ingested_at: datetime) -> int:
+    if not settings.pg_database_url:
+        return 0
+    return upsert_trials(
+        transformed_studies=trials,
+        ingestion_date=ingestion_date,
+        database_url=settings.pg_database_url,
+        ingested_at=ingested_at,
+    )
+
+
+@task(
+    name="pg-upsert-embeddings",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def pg_upsert_embeddings_task(embeddings: list[dict]) -> int:
+    if not settings.pg_database_url:
+        return 0
+    return upsert_embeddings(
+        embeddings=embeddings,
+        database_url=settings.pg_database_url,
+    )
 
 
 @task(
@@ -160,6 +199,7 @@ def clinical_trials_etl_flow(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     skip_embeddings: bool = False,
+    skip_existing_check: bool = False,
 ):
     """
     Parameters
@@ -203,14 +243,17 @@ def clinical_trials_etl_flow(
     total_trials = 0
     total_embedding_chunks = 0
     ingested_at = datetime.now(timezone.utc).date()
+    ingested_at_dt = datetime.now(timezone.utc)
     for chunk_idx, raw_chunk in enumerate(extract_studies_streaming(start, end)):
         trials = transform_task(raw_chunk)
         uploaded = gcs_upload_trials_chunk_task(trials, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
         total_trials += uploaded
+        pg_upsert_trials_task(trials, ingestion_date=ingested_at, ingested_at=ingested_at_dt)
         if not skip_embeddings:
-            embeddings = embeddings_chunk_task(trials)
+            embeddings = embeddings_chunk_task(trials, skip_existing_check=full_load or skip_existing_check)
             gcs_upload_embeddings_chunk_task(embeddings, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
             total_embedding_chunks += len(embeddings)
+            pg_upsert_embeddings_task(embeddings)
 
     if skip_embeddings:
         logger.info("Skipping embedding generation (--skip-embeddings)")
@@ -240,6 +283,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Load trial data only, skip embedding generation.",
     )
+    parser.add_argument(
+        "--skip-existing-check",
+        action="store_true",
+        help="Skip BQ hash lookup and embed all chunks unconditionally. Useful for test runs and initial loads.",
+    )
     args = parser.parse_args()
 
     clinical_trials_etl_flow(
@@ -247,4 +295,5 @@ if __name__ == "__main__":
         from_date=args.from_date,
         to_date=args.to_date,
         skip_embeddings=args.skip_embeddings,
+        skip_existing_check=args.skip_existing_check,
     )
