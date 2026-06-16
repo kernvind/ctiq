@@ -192,9 +192,6 @@ importers:
       '@hugeicons/react':
         specifier: ^1.1.6
         version: 1.1.6(react@19.2.4)
-      '@repo/db':
-        specifier: workspace:*
-        version: link:../../packages/db
       '@repo/generated-schemas-web':
         specifier: workspace:*
         version: link:../../packages/generated-schemas-web
