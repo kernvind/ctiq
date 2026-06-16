@@ -43,7 +43,7 @@ from src.tasks.extract import extract_studies_streaming
 from src.tasks.load.gcs_load import upload_embeddings_batch, upload_studies_batch
 from src.tasks.load.bq import load_batch_to_bigquery
 from src.tasks.load.pg import upsert_trials, upsert_embeddings
-from src.tasks.transform.embed import TrialEmbedder
+from src.tasks.transform.embed import get_embedder
 from src.tasks.transform.transform_studies import transform_studies
 
 # ── Prefect tasks ──────────────────────────────────────────────────────────────
@@ -107,15 +107,8 @@ def gcs_upload_embeddings_chunk_task(embeddings, run_id: str, chunk_idx: int, in
 def embeddings_chunk_task(
     transformed_studies: list[dict],
     skip_existing_check: bool = False,
-    trial_batch_size: int = settings.embedding_trial_batch_size,
 ) -> list[dict]:
-    embedder = TrialEmbedder()
-    all_embeddings: list[dict] = []
-    for i in range(0, len(transformed_studies), trial_batch_size):
-        sub_batch = transformed_studies[i : i + trial_batch_size]
-        rows = embedder.embed_trials(sub_batch, skip_existing_check=skip_existing_check)
-        all_embeddings.extend(rows)
-    return all_embeddings
+    return get_embedder().embed_trials(transformed_studies, skip_existing_check=skip_existing_check)
 
 
 @task(
@@ -215,7 +208,7 @@ def clinical_trials_etl_flow(
         (useful for quick backfills or debugging).
     """
     logger = get_run_logger()
-
+    
     # ── Resolve date window ────────────────────────────────────────────────────
     end: date = date.fromisoformat(to_date) if to_date else date.today()
     if full_load:
@@ -242,6 +235,7 @@ def clinical_trials_etl_flow(
     # no longer risk OOM.  A single BQ load job runs after all chunks are done.
     total_trials = 0
     total_embedding_chunks = 0
+    embed_chunk_idx = 0
     ingested_at = datetime.now(timezone.utc).date()
     ingested_at_dt = datetime.now(timezone.utc)
     for chunk_idx, raw_chunk in enumerate(extract_studies_streaming(start, end)):
@@ -250,10 +244,14 @@ def clinical_trials_etl_flow(
         total_trials += uploaded
         pg_upsert_trials_task(trials, ingestion_date=ingested_at, ingested_at=ingested_at_dt)
         if not skip_embeddings:
-            embeddings = embeddings_chunk_task(trials, skip_existing_check=full_load or skip_existing_check)
-            gcs_upload_embeddings_chunk_task(embeddings, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
-            total_embedding_chunks += len(embeddings)
-            pg_upsert_embeddings_task(embeddings)
+            trial_batch_size = settings.embedding_trial_batch_size
+            for sub_idx in range(0, len(trials), trial_batch_size):
+                sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
+                embeddings = embeddings_chunk_task(sub_batch, skip_existing_check=full_load or skip_existing_check)
+                gcs_upload_embeddings_chunk_task(embeddings, run_id=run_id, chunk_idx=embed_chunk_idx, ingested_at=ingested_at)
+                total_embedding_chunks += len(embeddings)
+                embed_chunk_idx += 1
+                pg_upsert_embeddings_task(embeddings)
 
     if skip_embeddings:
         logger.info("Skipping embedding generation (--skip-embeddings)")
