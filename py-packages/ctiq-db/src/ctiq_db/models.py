@@ -46,7 +46,7 @@ class ClinicalTrial(Base):
 
     # Design
     study_type: Mapped[Optional[str]] = mapped_column(String)
-    phases: Mapped[Optional[list]] = mapped_column(ARRAY(String))
+    phases: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
     allocation: Mapped[Optional[str]] = mapped_column(String)
     intervention_model: Mapped[Optional[str]] = mapped_column(String)
     primary_purpose: Mapped[Optional[str]] = mapped_column(String)
@@ -55,8 +55,8 @@ class ClinicalTrial(Base):
     enrollment_type: Mapped[Optional[str]] = mapped_column(String)
 
     # Conditions / Keywords
-    conditions: Mapped[Optional[list]] = mapped_column(ARRAY(String))
-    keywords: Mapped[Optional[list]] = mapped_column(ARRAY(String))
+    conditions: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
+    keywords: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
 
     # Eligibility
     eligibility_criteria: Mapped[Optional[str]] = mapped_column(Text)
@@ -65,7 +65,7 @@ class ClinicalTrial(Base):
     min_age_years: Mapped[Optional[float]] = mapped_column(Float)
     max_age_years: Mapped[Optional[float]] = mapped_column(Float)
     sex: Mapped[Optional[str]] = mapped_column(String)
-    std_ages: Mapped[Optional[list]] = mapped_column(ARRAY(String))
+    std_ages: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
     healthy_volunteers: Mapped[Optional[bool]] = mapped_column(Boolean)
 
     # Description
@@ -121,7 +121,7 @@ class TrialArmGroup(Base):
     label: Mapped[Optional[str]] = mapped_column(String)
     type: Mapped[Optional[str]] = mapped_column(String)
     description: Mapped[Optional[str]] = mapped_column(Text)
-    intervention_names: Mapped[Optional[list]] = mapped_column(ARRAY(String))
+    intervention_names: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
@@ -134,8 +134,8 @@ class TrialIntervention(Base):
     type: Mapped[Optional[str]] = mapped_column(String)
     name: Mapped[Optional[str]] = mapped_column(String)
     description: Mapped[Optional[str]] = mapped_column(Text)
-    other_names: Mapped[Optional[list]] = mapped_column(ARRAY(String))
-    arm_group_labels: Mapped[Optional[list]] = mapped_column(ARRAY(String))
+    other_names: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
+    arm_group_labels: Mapped[Optional[list]] = mapped_column(ARRAY(Text))
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
