@@ -130,7 +130,16 @@ def extract_chunks(transformed: dict) -> list[EmbeddingChunk]:
     return chunks
 
 # ─── Embedder ────────────────────────────────────────────────────────────────
- 
+
+_embedder_instance: Optional["TrialEmbedder"] = None
+
+def get_embedder() -> "TrialEmbedder":
+    global _embedder_instance
+    if _embedder_instance is None:
+        _embedder_instance = TrialEmbedder()
+    return _embedder_instance
+
+
 class TrialEmbedder:
     """
     Sentence-Transformers wrapper specialized for clinical trial chunks.
