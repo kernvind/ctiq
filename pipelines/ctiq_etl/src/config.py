@@ -22,18 +22,16 @@ class Settings(BaseSettings):
     ct_api_base_url: str = "https://clinicaltrials.gov/api/v2"
     ct_api_page_size: int = 1000
     ct_api_max_loop: int = 100 # Max pages to yield trials i.e 1000 * 100 (ct_api_page_size * ct_api_max_loop)
-    embedding_max_chunks: int = 10 # Max number of embedding chunks
-    embedding_max_records: int = 1000
     ct_api_max_retries: int = 5
     ct_api_overall_statuses: str = "ENROLLING_BY_INVITATION,RECRUITING,ACTIVE_NOT_RECRUITING,COMPLETED"
 
-    # ── Parallelism ───────────────────────────────────────────────────────────
-    # Number of Dask worker threads for concurrent API calls
-    dask_n_workers: int = 8
-    # Each Dask task covers this many days of lastUpdatePostDate range
-    date_range_chunk_days: int = 90
 
     bq_embeddings_table: str = "clinical_trials_embeddings"
+
+    # ── PostgreSQL (inference service read replica) ───────────────────────────
+    # Set this to enable the Postgres sink alongside BigQuery.
+    # Format: postgresql+psycopg://user:password@host:port/dbname
+    pg_database_url: Optional[str] = None
 
     # ── GCS staging ───────────────────────────────────────────────────────────
     # Parquet files are written here before the BQ load jobs read them
@@ -51,11 +49,11 @@ class Settings(BaseSettings):
     # Requires trust_remote_code=True.  Uses task prefixes:
     #   "search_document:" at index time, "search_query:" at query time.
     embedding_model_name: str = "nomic-ai/nomic-embed-text-v1.5"
-    # 8192-token window → 6000-char chunks keep most trials in 1-2 chunks.
-    embedding_chunk_size: int = 6000
-    embedding_chunk_overlap: int = 600
-    # 137 MB model; batch 32 is safe on CPU, raise to 64+ on GPU.
-    embedding_batch_size: int = 32
+    # 137 MB model; batch 16 is safe on CPU, raise to 32+ on GPU.
+    embedding_batch_size: int = 16
+    # Max trials per embedding sub-batch within a date-range chunk.
+    # Bounds the in-memory chunk list (~5 chunks/trial × 200 = 1 000 chunks at a time).
+    embedding_trial_batch_size: int = 200
 
     @property
     def bq_full_table_id(self) -> str:
