@@ -39,5 +39,9 @@ module "iam" {
   project_id  = var.project_id
   env         = "dev"
   github_repo = var.github_repo
+
+  # Workload Identity bindings reference the cluster's identity pool
+  # (PROJECT.svc.id.goog), which only exists once the cluster is created.
+  depends_on = [module.gke]
 }
 

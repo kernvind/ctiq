@@ -21,8 +21,9 @@ resource "google_project_service" "apis" {
   for_each = toset([
     "container.googleapis.com",           # GKE
     "artifactregistry.googleapis.com",    # Artifact Registry
-    "storage.googleapis.com",             # GCS
-    "iam.googleapis.com",                 # IAM
+    "storage.googleapis.com",              # GCS
+    "cloudresourcemanager.googleapis.com", # Project-level IAM bindings
+    "iam.googleapis.com",                  # IAM
     "iamcredentials.googleapis.com",      # Workload Identity Federation
     "secretmanager.googleapis.com",       # Secret Manager
     "bigquery.googleapis.com",            # BigQuery (ETL)
