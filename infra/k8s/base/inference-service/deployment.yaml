@@ -21,13 +21,15 @@ spec:
           ports:
             - containerPort: 8000
           # pydantic-settings reads env case-insensitively, so PG_DATABASE_URL
-          # maps to the pg_database_url setting. Same Supabase DB as api-core.
+          # maps to the pg_database_url setting. Same Supabase DB as api-core,
+          # but a separate secret key: asyncpg can't parse the ?pgbouncer=true
+          # query param that api-core's Prisma URL requires.
           env:
             - name: PG_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: supabase-db
-                  key: DATABASE_URL
+                  key: PG_DATABASE_URL
           # Embedding model (~550MB) is baked into the image, plus torch — needs
           # more memory than the JS services. 1 CPU : 2Gi is within Autopilot ratio.
           resources:

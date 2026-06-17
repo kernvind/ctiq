@@ -3,7 +3,27 @@
         up-api down-api logs-api \
         up-web down-web logs-web \
         up-inference down-inference logs-inference \
-        tf-plan-shared tf-apply-shared
+        tf-plan-shared tf-apply-shared \
+        migrate-prisma migrate-alembic migrate-all
+
+# ── Database migrations ────────────────────────────────────────────────────────
+# Both tools read DATABASE_URL from the environment. Use the Supabase DIRECT
+# connection (port 5432 / session mode) here — NOT the transaction pooler (6543),
+# which breaks DDL and Prisma's migration engine.
+#
+# Always `prisma migrate deploy` (forward-only). Never `migrate dev` in shared
+# environments — it diffs the whole schema and would clobber Alembic's tables.
+#
+# Usage:
+#   make migrate-all DATABASE_URL="postgresql://...@db.<ref>.supabase.co:5432/postgres"
+
+migrate-prisma:
+	pnpm --filter @repo/db db:deploy
+
+migrate-alembic:
+	cd py-packages/ctiq-db && poetry run alembic upgrade head
+
+migrate-all: migrate-prisma migrate-alembic
 
 # ── Terraform ─────────────────────────────────────────────────────────────────
 
