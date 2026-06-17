@@ -21,7 +21,6 @@ export class AuthService {
     if (!user || typeof dto.password !== 'string') {
       throw new UnauthorizedException('Invalid credentials');
     }
-    console.log('User found:', user);
     const passwordMatches = await compare(dto.password, user.passwordHash);
 
     if (!passwordMatches) {
@@ -31,6 +30,7 @@ export class AuthService {
     const token = this.jwtService.sign({
       sub: user.id,
       username: user.username,
+      role: user.role,
     });
 
     return { token };
@@ -61,6 +61,7 @@ export class AuthService {
     const token = this.jwtService.sign({
       sub: user.id,
       username: user.username,
+      role: user.role,
     });
 
     return { token };

@@ -11,27 +11,64 @@ datasource db {
   schemas  = ["app"]
 }
 
+/// The four ctiq personas. A user has exactly one role; defaults to PATIENT on signup
+/// (elevated roles are assigned out-of-band, never self-selected at registration).
+enum Role {
+  PATIENT
+  CLINICIAN
+  ANALYST // pharma/biotech competitive-intelligence analyst
+  ADMIN
+
+  @@schema("app")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+
+  @@schema("app")
+}
+
 model User {
-  id       Int    @id @default(autoincrement())
+  id       String @id @default(cuid())
   email    String @unique
   username String @unique
 
   /// @zod.string.min(1).max(255)
   passwordHash String
 
-  name  String?
-  posts Post[]
+  name   String?
+  role   Role       @default(PATIENT)
+  status UserStatus @default(ACTIVE)
+
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions Session[]
 
   @@schema("app")
 }
 
-model Post {
-  id        Int     @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean @default(false)
-  authorId  Int
-  author    User    @relation(fields: [authorId], references: [id])
+/// Refresh-token sessions. Enables real logout and token revocation (stateless access
+/// JWTs alone can't be revoked). Only the HASH of the refresh token is stored, never
+/// the raw token.
+model Session {
+  id        String @id @default(cuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String @unique
 
+  userAgent String?
+  ip        String?
+
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
   @@schema("app")
 }
