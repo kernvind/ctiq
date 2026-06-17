@@ -31,9 +31,11 @@ export class UsersService {
     email: string,
     passwordHash: string,
     name?: string,
+    role?: Role,
   ): Promise<UserRecord> {
+    // role omitted -> Prisma applies the schema default (PATIENT).
     return await this.prisma.client.user.create({
-      data: { username, email, passwordHash, name },
+      data: { username, email, passwordHash, name, role },
     });
   }
 }

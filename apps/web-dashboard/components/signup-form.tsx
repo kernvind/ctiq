@@ -16,7 +16,7 @@ import {
   FieldLabel,
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { ShieldCheck, User, Lock, Mail, UserCircle } from "lucide-react";
+import { ShieldCheck, User, Lock, Mail, UserCircle, Stethoscope } from "lucide-react";
 import Link from "next/link";
 import { signup } from "@/app/signup/actions";
 
@@ -57,6 +57,23 @@ export function SignupForm({
                     placeholder="Jane Doe"
                     className="pl-8"
                   />
+                </div>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="role">I am a</FieldLabel>
+                <div className="relative">
+                  <Stethoscope className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <select
+                    id="role"
+                    name="role"
+                    defaultValue="PATIENT"
+                    className="h-7 w-full min-w-0 appearance-none rounded-md border border-input bg-input/20 pl-8 pr-2 py-0.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 md:text-xs/relaxed dark:bg-input/30"
+                  >
+                    <option value="PATIENT">Patient</option>
+                    <option value="CLINICIAN">Clinician</option>
+                    <option value="ANALYST">Industry / research analyst</option>
+                  </select>
                 </div>
               </Field>
 
@@ -137,7 +154,7 @@ export function SignupForm({
       </Card>
 
       <p className="text-center text-xs text-muted-foreground">
-        Protected by HIPAA-compliant security
+        Secured with encrypted connections
       </p>
     </div>
   );

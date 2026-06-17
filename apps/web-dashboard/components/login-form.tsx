@@ -110,7 +110,7 @@ export function LoginForm({
       </Card>
 
       <p className="text-center text-xs text-muted-foreground">
-        Protected by HIPAA-compliant security
+        Secured with encrypted connections
       </p>
     </div>
   );

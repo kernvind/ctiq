@@ -4,7 +4,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { LoggerModule } from 'nestjs-pino';
 
+import { buildLoggerParams } from './common/logging/logger.params';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TrialSearchModule } from './trial-search/trial-search.module';
@@ -19,6 +21,10 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
+    // Structured logging (Pino) — JSON to stdout in prod (ingested by Cloud
+    // Logging on GKE), pretty output in dev. Provides per-request logs + req id.
+    LoggerModule.forRoot(buildLoggerParams()),
 
     // 2. Safely bootstrap HttpModule using the global ConfigService
     HttpModule.registerAsync({

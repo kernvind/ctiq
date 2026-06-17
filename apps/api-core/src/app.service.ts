@@ -5,7 +5,8 @@ export class AppService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getHello(): Promise<string> {
-    const user = await this.prisma.client.user.findMany();
-    return user[0].email;
+    // Liveness check: verify DB connectivity without reading any table data.
+    await this.prisma.client.$queryRaw`SELECT 1`;
+    return 'ok';
   }
 }

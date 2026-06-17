@@ -18,11 +18,12 @@ export async function signup(
     name: formData.get("name"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
+    role: formData.get("role"),
   });
   if (!result.success) {
     return { error: flattenZodErrors(result.error) };
   }
-  const { username, email, name, password } = result.data;
+  const { username, email, name, password, role } = result.data;
   const confirmPassword = formData.get("confirmPassword") as string;
 
   if (password !== confirmPassword) {
@@ -32,7 +33,7 @@ export async function signup(
   let token: string;
   try {
     const data = await sdk.signup_mutation({
-      input: { username, email, password, name: name || undefined },
+      input: { username, email, password, name: name || undefined, role },
     });
     token = data.signup.token;
   } catch (err: unknown) {

@@ -1,3 +1,4 @@
+export * from "./enums/signup-role.enum";
 export * from "./inputs/user/login.input";
 export * from "./inputs/user/signup.input";
 export * from "./types/trial-search/trial-search.type";

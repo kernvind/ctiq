@@ -10,6 +10,10 @@ const config: CodegenConfig = {
         "typescript-operations",
         "typescript-graphql-request",
       ],
+      // Emit GraphQL enums as string-union types (e.g. SignupRole = "PATIENT" | ...)
+      // so validated string values from forms assign directly without enum-member
+      // mapping.
+      config: { enumsAsTypes: true },
     },
   },
 };

@@ -73,7 +73,15 @@ input SignupInput {
   email: String!
   name: String
   password: String!
+  role: SignupRole! = PATIENT
   username: String!
+}
+
+"""Roles a user may choose at signup (excludes ADMIN)."""
+enum SignupRole {
+  ANALYST
+  CLINICIAN
+  PATIENT
 }
 
 type TrialCard {
