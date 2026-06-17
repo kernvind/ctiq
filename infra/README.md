@@ -245,15 +245,97 @@ In-cluster service wiring:
 - api-core → inference via `SEARCH_API_URL=http://inference-service:8000`
 - web-dashboard → api-core via `BACKEND_URL=http://api-core:3001`
 
-> `NEXT_PUBLIC_API_URL` is **not** a runtime ConfigMap — Next.js inlines
-> `NEXT_PUBLIC_*` at build time, so it's a `--build-arg`. The browser can't
-> reach api-core until an Ingress exists (see Pending work).
+> **BFF architecture — only web-dashboard needs external exposure.** All
+> api-core calls happen in Next.js Server Actions (server-side) via
+> `BACKEND_URL=http://api-core:3001`. The browser never calls api-core
+> directly (`packages/generated-schemas-web` targets `BACKEND_URL`, not
+> `NEXT_PUBLIC_API_URL`, and the SDK is only imported in `"use server"`
+> files). So **api-core and inference stay `ClusterIP` (private)** — better
+> security — and the future Ingress covers web-dashboard alone.
 
 Validate the rendered manifests without applying:
 
 ```bash
 kubectl kustomize infra/k8s/overlays/dev
 ```
+
+---
+
+## 10. Teardown (stop billing) & bring-up
+
+The dev env is cheap to cycle down/up to avoid idle charges. The main costs are
+the **Autopilot cluster management fee** (~$0.10/hr), **Cloud NAT** (~$0.044/hr),
+and the running Spot pods. Scaling pods to zero does **not** stop the cluster
+fee or NAT — a `terraform destroy` does.
+
+### Teardown
+
+```bash
+cd infra/terraform/envs/dev
+terraform plan -destroy -out=destroy.tfplan   # review: ~18 resources
+terraform apply destroy.tfplan
+rm -f destroy.tfplan
+```
+
+This destroys the **cluster, VPC, subnet, Cloud Router + NAT, service accounts,
+and Workload Identity pool/bindings**. Because the IAM module has
+`depends_on = [module.gke]`, a destroy targeting `module.gke` cascades to IAM
+too — so it's an all-or-nothing teardown of the env (the IAM resources are free
+anyway).
+
+**What survives** (cents/month, and what makes bring-up fast):
+
+| Survives | Where | Why it matters |
+|---|---|---|
+| Artifact Registry images | `shared/` | No image rebuild on return |
+| Terraform state bucket | `shared/` | State intact |
+| BigQuery `healthcare_ai` | `shared/` | Preserved |
+| Supabase data | external | Loaded data is safe — no re-migration |
+
+Verify everything is gone:
+
+```bash
+gcloud container clusters list --project data-eng-470620   # empty
+gcloud compute routers list --project data-eng-470620      # empty
+```
+
+### Bring-up
+
+```bash
+cd infra/terraform/envs/dev
+terraform apply                       # recreates cluster + NAT + IAM (~15 min)
+```
+
+> **Workload Identity pool soft-delete:** WI pools are soft-deleted for 30 days.
+> If `terraform apply` errors recreating `github-actions-pool`, undelete it once
+> and re-apply:
+> ```bash
+> gcloud iam workload-identity-pools undelete github-actions-pool --location=global
+> ```
+
+Then reconnect kubectl, recreate the secrets (values unchanged — see sections 5
+and 7), and redeploy:
+
+```bash
+gcloud container clusters get-credentials ctiq-dev --region us-central1 --project data-eng-470620
+
+kubectl create secret generic supabase-db -n dev \
+  --from-literal=DATABASE_URL="postgresql://postgres.<ref>:<pwd>@<host>.pooler.supabase.com:6543/postgres?pgbouncer=true" \
+  --from-literal=PG_DATABASE_URL="postgresql://postgres.<ref>:<pwd>@<host>.pooler.supabase.com:5432/postgres"
+kubectl create secret generic api-core-secrets -n dev \
+  --from-literal=JWT_SECRET="change-me-in-production" \
+  --from-literal=SEARCH_API_TOKEN="test-token"
+
+kubectl apply -k infra/k8s/overlays/dev
+kubectl get pods -n dev -w
+```
+
+No re-migration needed — the schema and data live in Supabase. The
+Artifact Registry images are still tagged `:latest`, so pods pull immediately.
+
+> **Reminder:** inference uses the Supabase **session pooler (5432)** in
+> `PG_DATABASE_URL`, not the transaction pooler (6543) — the latter breaks
+> asyncpg prepared statements used by pgvector's `register_vector`.
 
 ---
 
@@ -317,6 +399,10 @@ kubectl kustomize . | kubectl apply -f -
 ## Pending work
 
 - [ ] GitHub Actions CI/CD (build-push + gated migrate + deploy via WIF)
-- [ ] Ingress / external exposure for api-core and web-dashboard (+ rebuild
-      web-dashboard with the real `NEXT_PUBLIC_API_URL`)
+- [ ] Ingress / external exposure for **web-dashboard only** (api-core +
+      inference stay private — BFF architecture)
+- [ ] Slim the inference image (~4.3 GB → ~2.8 GB) by installing CPU-only torch
+- [ ] Real dependency-free `/health` in api-core (so liveness isn't TCP-only)
+- [ ] External Secrets Operator — back the K8s secrets with GCP Secret Manager
+- [ ] Drop the dead `NEXT_PUBLIC_API_URL` build-arg (unused — BFF)
 - [ ] staging / prod environments (`deletion_protection = true`, non-Spot)
