@@ -39,16 +39,26 @@ spec:
             limits:
               cpu: "1"
               memory: 2Gi
+          # The embedding model loads in the FastAPI lifespan BEFORE uvicorn
+          # serves, so port 8000 is closed during load. A startupProbe gives it
+          # generous time; liveness/readiness only engage once startup succeeds.
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 30      # up to ~5 min for model load + DB pool
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /
               port: 8000
-            # Model loads into memory on startup — give it time before probing.
-            initialDelaySeconds: 60
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /
               port: 8000
-            initialDelaySeconds: 90
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3

@@ -50,15 +50,24 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          # TCP probes, NOT httpGet on "/". The "/" route is a demo endpoint
+          # that queries the User table and returns user[0].email — it throws
+          # on an empty database, so it can never be a valid health check.
+          # TODO: add a dependency-free /health endpoint to api-core and switch
+          # these back to httpGet.
+          startupProbe:
+            tcpSocket:
+              port: 3001
+            periodSeconds: 5
+            failureThreshold: 24      # up to 120s to start before liveness engages
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 3001
-            initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: 3001
-            initialDelaySeconds: 20
             periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3

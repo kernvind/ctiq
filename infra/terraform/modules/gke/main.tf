@@ -26,6 +26,33 @@ resource "google_compute_subnetwork" "ctiq" {
   }
 }
 
+# ── Cloud NAT ──────────────────────────────────────────────────────────────────
+# Private nodes have no public IP, so outbound internet (Supabase, HuggingFace,
+# PyPI, etc.) requires Cloud NAT. Without this, pods can reach Google APIs via
+# Private Google Access but nothing else — DB connections to Supabase hang.
+
+resource "google_compute_router" "ctiq" {
+  name    = "ctiq-${var.env}-router"
+  project = var.project_id
+  region  = var.region
+  network = google_compute_network.ctiq.id
+}
+
+resource "google_compute_router_nat" "ctiq" {
+  name    = "ctiq-${var.env}-nat"
+  project = var.project_id
+  region  = var.region
+  router  = google_compute_router.ctiq.name
+
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    enable = true
+    filter = "ERRORS_ONLY"
+  }
+}
+
 # ── GKE Autopilot cluster ──────────────────────────────────────────────────────
 # Autopilot: Google manages node pools, OS patching, and scaling.
 # You pay per pod CPU/memory request, not per node — scales to near-zero in dev.
