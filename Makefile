@@ -4,7 +4,8 @@
         up-web down-web logs-web \
         up-inference down-inference logs-inference \
         tf-plan-shared tf-apply-shared \
-        migrate-prisma migrate-alembic migrate-all
+        migrate-prisma migrate-alembic migrate-all \
+        docker-auth push-api-core push-inference push-web-dashboard push-dev
 
 # ── Database migrations ────────────────────────────────────────────────────────
 # Both tools read DATABASE_URL from the environment. Use the Supabase DIRECT
@@ -21,7 +22,7 @@ migrate-prisma:
 	pnpm --filter @repo/db db:deploy
 
 migrate-alembic:
-	cd py-packages/ctiq-db && .venv/bin/alembic upgrade head
+	cd py-packages/ctiq-db && poetry install && .venv/bin/alembic upgrade head
 
 migrate-all: migrate-prisma migrate-alembic
 
@@ -61,6 +62,49 @@ docker-etl:
 	  -t ctiq-etl .
 
 docker-all: docker-web-dashboard docker-api-core docker-inference docker-etl
+
+# ── Build + push to Artifact Registry ──────────────────────────────────────────
+# Mirrors what CI does. Override TAG with the git SHA for real deploys:
+#   make push-dev TAG=$(git rev-parse --short HEAD)
+#
+# PLATFORM is pinned to linux/amd64 because GKE Autopilot nodes are amd64 and
+# this is built on an arm64 Mac — without it, pods crash with "exec format
+# error". Emulated amd64 builds are slower (the inference image especially);
+# CI runs on native amd64 and is the fast path.
+
+REGISTRY ?= us-central1-docker.pkg.dev/data-eng-470620/ctiq
+TAG      ?= latest
+PLATFORM ?= linux/amd64
+
+# web-dashboard bakes NEXT_PUBLIC_API_URL into the JS bundle at build time.
+# Override with the external api-core URL once an Ingress exists.
+NEXT_PUBLIC_API_URL ?= http://localhost:3001/graphql
+
+# One-time: let Docker authenticate to Artifact Registry via gcloud.
+docker-auth:
+	gcloud auth configure-docker us-central1-docker.pkg.dev
+
+push-api-core:
+	docker build --platform $(PLATFORM) \
+	  -f apps/api-core/Dockerfile \
+	  -t $(REGISTRY)/api-core:$(TAG) .
+	docker push $(REGISTRY)/api-core:$(TAG)
+
+push-inference:
+	docker build --platform $(PLATFORM) \
+	  --secret id=hf_token,env=HF_TOKEN \
+	  -f ai-service/inference-service/Dockerfile \
+	  -t $(REGISTRY)/inference-service:$(TAG) .
+	docker push $(REGISTRY)/inference-service:$(TAG)
+
+push-web-dashboard: schema-generate
+	docker build --platform $(PLATFORM) \
+	  --build-arg NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) \
+	  -f apps/web-dashboard/Dockerfile \
+	  -t $(REGISTRY)/web-dashboard:$(TAG) .
+	docker push $(REGISTRY)/web-dashboard:$(TAG)
+
+push-dev: push-api-core push-inference push-web-dashboard
 
 # ── Local docker-compose ───────────────────────────────────────────────────────
 
