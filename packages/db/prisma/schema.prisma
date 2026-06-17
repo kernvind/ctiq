@@ -5,6 +5,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // User/auth domain lives in its own `app` schema, separate from the clinical-trial
+  // domain (`trials`, owned by the Python ctiq-db package). multiSchema is GA in
+  // Prisma 7, so no preview feature flag is needed.
+  schemas  = ["app"]
 }
 
 model User {
@@ -17,6 +21,8 @@ model User {
 
   name  String?
   posts Post[]
+
+  @@schema("app")
 }
 
 model Post {
@@ -26,4 +32,6 @@ model Post {
   published Boolean @default(false)
   authorId  Int
   author    User    @relation(fields: [authorId], references: [id])
+
+  @@schema("app")
 }

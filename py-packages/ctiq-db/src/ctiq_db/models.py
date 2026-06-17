@@ -2,13 +2,19 @@ from datetime import date, datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, BigInteger, Boolean, Date, DateTime, Float, Integer, String, Text
+from sqlalchemy import ARRAY, BigInteger, Boolean, Date, DateTime, Float, Integer, MetaData, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+# All trial-domain tables live in the dedicated `trials` schema, separate from the
+# user/auth domain (owned by api-core's Prisma schema `app`). See the two-ORM domain
+# split in the ctiq-product-engineering skill. Setting the schema on the shared
+# MetaData makes every model below resolve to `trials.<table>` automatically.
+TRIALS_SCHEMA = "trials"
+
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(schema=TRIALS_SCHEMA)
 
 
 class ClinicalTrial(Base):

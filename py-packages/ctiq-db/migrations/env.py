@@ -4,7 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from ctiq_db.models import Base
+from ctiq_db.models import Base, TRIALS_SCHEMA
 
 config = context.config
 
@@ -12,6 +12,19 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+
+def include_name(name, type_, parent_names):
+    """Restrict autogenerate to the trial domain.
+
+    With a schema-qualified metadata we must enable ``include_schemas`` so Alembic
+    reflects the ``trials`` schema. Without this filter, autogenerate would also scan
+    Supabase-managed schemas (auth, storage, public, …) and could propose dropping
+    tables this package does not own. We only ever manage ``trials`` here.
+    """
+    if type_ == "schema":
+        return name == TRIALS_SCHEMA
+    return True
 
 # DATABASE_URL from environment overrides the alembic.ini placeholder.
 # Normalize the scheme to the psycopg (v3) driver: this project installs
@@ -39,6 +52,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_schemas=True,
+        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -51,7 +66,12 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_schemas=True,
+            include_name=include_name,
+        )
         with context.begin_transaction():
             context.run_migrations()
 
