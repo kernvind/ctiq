@@ -5,10 +5,10 @@
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",
     "scripts": {
-        "build:package": "prisma generate && rimraf dist && tsup",
+        "build:package": "rimraf dist && tsup",
         "dev": "tsup --watch",
         "lint": "eslint . --max-warnings 0",
-        "db:generate": "prisma generate",
+        "db:generate": "rimraf src/generated/prisma && prisma generate",
         "db:migrate": "prisma migrate dev",
         "db:deploy": "prisma migrate deploy"
     },
