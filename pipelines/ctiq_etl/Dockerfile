@@ -39,7 +39,9 @@ FROM deps AS model
 
 ENV HF_HOME=/app/pipelines/ctiq_etl/.hf-cache
 
-RUN python -c "\
+RUN --mount=type=secret,id=hf_token,required=false \
+    HF_TOKEN=$(cat /run/secrets/hf_token 2>/dev/null || true) \
+    python -c "\
 from sentence_transformers import SentenceTransformer; \
 SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)"
 
