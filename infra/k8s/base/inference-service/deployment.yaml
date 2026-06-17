@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-service
+  labels:
+    app: inference-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference-service
+  template:
+    metadata:
+      labels:
+        app: inference-service
+    spec:
+      serviceAccountName: inference-ksa
+      containers:
+        - name: inference-service
+          image: inference-service   # overlay rewrites to the Artifact Registry URL + tag
+          ports:
+            - containerPort: 8000
+          # pydantic-settings reads env case-insensitively, so PG_DATABASE_URL
+          # maps to the pg_database_url setting. Same Supabase DB as api-core.
+          env:
+            - name: PG_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-db
+                  key: DATABASE_URL
+          # Embedding model (~550MB) is baked into the image, plus torch — needs
+          # more memory than the JS services. 1 CPU : 2Gi is within Autopilot ratio.
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            # Model loads into memory on startup — give it time before probing.
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 90
+            periodSeconds: 15

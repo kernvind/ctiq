@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-core
+  labels:
+    app: api-core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-core
+  template:
+    metadata:
+      labels:
+        app: api-core
+    spec:
+      serviceAccountName: api-core-ksa
+      containers:
+        - name: api-core
+          image: api-core           # overlay rewrites to the Artifact Registry URL + tag
+          ports:
+            - containerPort: 3001
+          # Non-sensitive config (FastAPI paths, inference URL, JWT TTL).
+          # SEARCH_API_URL points at the inference Service DNS name in-cluster.
+          envFrom:
+            - configMapRef:
+                name: api-core-config
+          # Sensitive values pulled from Kubernetes Secrets (created via kubectl,
+          # never committed). DATABASE_URL is the Supabase connection string.
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: supabase-db
+                  key: DATABASE_URL
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: api-core-secrets
+                  key: JWT_SECRET
+            - name: SEARCH_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: api-core-secrets
+                  key: SEARCH_API_TOKEN
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3001
+            initialDelaySeconds: 20
+            periodSeconds: 15

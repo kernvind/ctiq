@@ -1,0 +1,77 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Everything lands in the dev namespace.
+namespace: dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+# ── Images ────────────────────────────────────────────────────────────────────
+# Base manifests reference short names; map them to the Artifact Registry repo.
+# CI overwrites newTag with the git SHA on each deploy (kustomize edit set image).
+images:
+  - name: api-core
+    newName: us-central1-docker.pkg.dev/data-eng-470620/ctiq/api-core
+    newTag: latest
+  - name: inference-service
+    newName: us-central1-docker.pkg.dev/data-eng-470620/ctiq/inference-service
+    newTag: latest
+  - name: web-dashboard
+    newName: us-central1-docker.pkg.dev/data-eng-470620/ctiq/web-dashboard
+    newTag: latest
+
+# ── Non-sensitive config ──────────────────────────────────────────────────────
+# configMapGenerator appends a content hash to the name, so editing a value
+# rolls the Deployment automatically. References in base are rewritten by kustomize.
+configMapGenerator:
+  - name: api-core-config
+    literals:
+      - SEARCH_API_URL=http://inference-service:8000
+      - JWT_EXPIRES_IN=8h
+      - FAST_API_VERSION_V1=/api/v1
+      - FAST_API_VERSION_V2=/api/v2
+      - FAST_API_SEARCH_TRIAL_PATH=/search/trials
+  - name: web-dashboard-config
+    literals:
+      - BACKEND_URL=http://api-core:3001
+      # Dev is served over HTTP (no TLS yet) — Secure cookies would break login.
+      - COOKIE_SECURE=false
+
+# ── Patches ───────────────────────────────────────────────────────────────────
+patches:
+  # Spot Pods for ALL workloads in dev — cheapest compute. Applied here (not in
+  # base) so prod can run on standard nodes without touching the base manifests.
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          cloud.google.com/gke-spot: "true"
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: cloud.google.com/gke-spot
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  # Workload Identity: bind each KSA to its dev GCP service account.
+  - target:
+      kind: ServiceAccount
+      name: api-core-ksa
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          iam.gke.io/gcp-service-account: ctiq-api-core-dev@data-eng-470620.iam.gserviceaccount.com
+  - target:
+      kind: ServiceAccount
+      name: inference-ksa
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          iam.gke.io/gcp-service-account: ctiq-inference-dev@data-eng-470620.iam.gserviceaccount.com
