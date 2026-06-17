@@ -1,9 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { sdk } from "@repo/generated-schemas-web";
 import { flattenZodErrors } from "@/lib/zod-errors";
+import { setAuthCookies } from "@/lib/auth-cookies";
 import { ZodRegisterFormSchema } from "@repo/zod-validations";
 
 export type SignupState = { error: string } | null;
@@ -30,12 +30,14 @@ export async function signup(
     return { error: "Passwords do not match" };
   }
 
-  let token: string;
+  let accessToken: string;
+  let refreshToken: string;
   try {
     const data = await sdk.signup_mutation({
       input: { username, email, password, name: name || undefined, role },
     });
-    token = data.signup.token;
+    accessToken = data.signup.accessToken;
+    refreshToken = data.signup.refreshToken;
   } catch (err: unknown) {
     const message =
       (err as { response?: { errors?: { message: string }[] } })?.response
@@ -43,13 +45,6 @@ export async function signup(
     return { error: message };
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set("token", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-  });
-
+  await setAuthCookies(accessToken, refreshToken);
   redirect("/dashboard");
 }
