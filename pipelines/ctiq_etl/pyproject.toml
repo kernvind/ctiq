@@ -43,7 +43,13 @@ description = "Clinical trials ETL pipeline"
 # This tells Poetry: "Look in the 'src' folder for my package code"
 packages = [{include = "src"}]
 
-[tool.poetry.dependencies]
+# ctiq-db is a local path dep, isolated in an optional group so `poetry export
+# --only main` skips it in the Docker deps stage (where the path isn't present).
+# At runtime ctiq-db is made importable via PYTHONPATH, not pip-installed.
+[tool.poetry.group.local]
+optional = true
+
+[tool.poetry.group.local.dependencies]
 ctiq-db = {path = "../../py-packages/ctiq-db", develop = true}
 
 [build-system]

@@ -18,14 +18,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-RUN pip install "poetry==${POETRY_VERSION}"
+# Poetry 2.x removed `export` from core — it now ships as a separate plugin.
+RUN pip install "poetry==${POETRY_VERSION}" poetry-plugin-export
 
 WORKDIR /app/pipelines/ctiq_etl
 
 COPY pipelines/ctiq_etl/pyproject.toml \
      pipelines/ctiq_etl/poetry.lock    ./
 
-RUN poetry export -f requirements.txt --without-hashes --without dev -o requirements.txt && \
+RUN poetry export -f requirements.txt --only main --without-hashes -o requirements.txt && \
     pip install --no-cache-dir -r requirements.txt
 
 # ─────────────────────────────────────────────────────────────────────────────

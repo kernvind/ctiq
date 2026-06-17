@@ -67,7 +67,8 @@ env/
 ENV/
 .env.python
 Pipfile.lock
-poetry.lock
+# poetry.lock is intentionally committed — deployable services need reproducible,
+# CI-safe Docker builds (Dockerfiles COPY poetry.lock).
 
 # Python distribution / packaging
 *.egg
