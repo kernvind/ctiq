@@ -21,7 +21,7 @@ migrate-prisma:
 	pnpm --filter @repo/db db:deploy
 
 migrate-alembic:
-	cd py-packages/ctiq-db && poetry run alembic upgrade head
+	cd py-packages/ctiq-db && .venv/bin/alembic upgrade head
 
 migrate-all: migrate-prisma migrate-alembic
 
