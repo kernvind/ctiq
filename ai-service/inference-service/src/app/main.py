@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 
 import torch
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from sentence_transformers import SentenceTransformer
+
+from src.app.api.security import verify_internal_token
 
 from src.app.core.config import get_settings
 from src.app.core.set_logger import configure_logging
@@ -46,7 +48,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 from src.app.modules.trial_search.router import router as search_router
-app.include_router(search_router)
+# All search routes require the internal token; `/` (health) stays open for probes.
+app.include_router(search_router, dependencies=[Depends(verify_internal_token)])
 
 
 @app.get("/")

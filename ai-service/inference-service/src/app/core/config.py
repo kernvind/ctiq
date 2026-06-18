@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # ── HuggingFace embeddings ────────────────────────────────────────────────
     embedding_model_name: str = "nomic-ai/nomic-embed-text-v1.5"
 
+    # ── Internal service auth ─────────────────────────────────────────────────
+    # Shared secret with api-core, sent as the `X-Internal-Token` header. Must match
+    # api-core's SEARCH_API_TOKEN. Left empty here so the app still boots (health probes
+    # pass); requests are rejected until it is configured (see api/security.py).
+    search_api_token: str = ""
+
     @property
     def asyncpg_database_url(self) -> str:
         """Strip SQLAlchemy driver prefix so asyncpg can use the URL directly."""
