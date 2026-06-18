@@ -15,6 +15,7 @@ services:
     environment:
       - PG_DATABASE_URL=${PG_DATABASE_URL}
       - HF_TOKEN=${HF_TOKEN} # value comes from .env file, never hardcoded here
+      - SEARCH_API_TOKEN=${SEARCH_API_TOKEN} # value comes from .env file, never hardcoded here
     volumes:
       # Live code reload — host source shadows the baked-in copy in the image.
       - ./src:/app/ai-service/inference-service/src
