@@ -29,7 +29,10 @@ describe('formatGraphQLError', () => {
       }),
     );
     expect(out.message).toBe('Invalid credentials');
-    expect(out.extensions).toMatchObject({ code: 'UnauthorizedException', statusCode: 401 });
+    expect(out.extensions).toMatchObject({
+      code: 'UnauthorizedException',
+      statusCode: 401,
+    });
   });
 
   it('masks the message for 5xx errors', () => {

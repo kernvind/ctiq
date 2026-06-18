@@ -23,9 +23,12 @@ export function formatGraphQLError(
   // Stack traces must never reach the client.
   delete extensions.stacktrace;
 
-  const code = typeof extensions.code === 'string' ? extensions.code : INTERNAL_CODE;
+  const code =
+    typeof extensions.code === 'string' ? extensions.code : INTERNAL_CODE;
   const statusCode =
-    typeof extensions.statusCode === 'number' ? extensions.statusCode : undefined;
+    typeof extensions.statusCode === 'number'
+      ? extensions.statusCode
+      : undefined;
 
   const isInternal =
     code === INTERNAL_CODE || (statusCode !== undefined && statusCode >= 500);

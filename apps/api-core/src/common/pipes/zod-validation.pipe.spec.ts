@@ -39,10 +39,11 @@ describe('ZodValidationPipe', () => {
 
   it('does not let unknown keys through (returns only the schema shape)', () => {
     const pipe = zodPipe(schema);
-    const out = pipe.transform({ username: 'abc', age: 5, extra: 'x' }) as Record<
-      string,
-      unknown
-    >;
+    const out = pipe.transform({
+      username: 'abc',
+      age: 5,
+      extra: 'x',
+    }) as Record<string, unknown>;
     expect(out).not.toHaveProperty('extra');
   });
 });
