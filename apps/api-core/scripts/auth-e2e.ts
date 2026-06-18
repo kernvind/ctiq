@@ -50,6 +50,10 @@ async function main(): Promise<void> {
   process.env.JWT_EXPIRES_IN = '15m';
   process.env.REFRESH_TOKEN_TTL_DAYS = '30';
   process.env.NODE_ENV = 'production';
+  // TrialSearchModule's HttpModule resolves these at boot via getOrThrow. The auth flow
+  // never calls trial-search, so dummy values are enough to let the app start.
+  process.env.SEARCH_API_URL = 'http://localhost:9999';
+  process.env.SEARCH_API_TOKEN = 'test-token';
 
   // abortOnError:false -> a bootstrap error is THROWN (so we can report it) instead of
   // Nest logging it and calling process.exit(1) silently. Logger stays on so Nest also
