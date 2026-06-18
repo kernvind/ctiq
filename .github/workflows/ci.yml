@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── JS/TS: turbo-orchestrated unit tests (api-core Jest + web-dashboard Vitest) ──
+  js:
+    name: JS/TS tests
+    runs-on: ubuntu-latest
+    env:
+      # `@repo/db` build runs `prisma generate`, which needs DATABASE_URL *defined*
+      # (not reachable). A dummy value is enough.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # reads packageManager (pnpm@11.1.1) from package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # matches .nvmrc / the Dockerfiles
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Test (turbo)
+        run: make test-js
+
+  # ── Python: inference-service unit tests ────────────────────────────────────────
+  python:
+    name: Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry
+        run: pipx install poetry
+      - name: Use in-project virtualenv
+        run: poetry config virtualenvs.in-project true
+      - name: Cache venv
+        uses: actions/cache@v4
+        with:
+          path: ai-service/inference-service/.venv
+          key: venv-${{ runner.os }}-${{ hashFiles('ai-service/inference-service/poetry.lock') }}
+      - name: Install deps
+        working-directory: ai-service/inference-service
+        run: poetry install --with dev
+      - name: Test (pytest)
+        run: make test-py
+
+  # ── Integration: Docker / Testcontainers (ephemeral Postgres + pgvector) ────────
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest # GitHub runners provide a Docker daemon
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pipx install poetry
+      - run: poetry config virtualenvs.in-project true
+      - name: Install inference deps
+        working-directory: ai-service/inference-service
+        run: poetry install --with dev
+      - name: Integration tests (api-core + inference)
+        run: make test-integration
