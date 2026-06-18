@@ -67,11 +67,13 @@ test-py:
 
 test-integration: test-integration-api test-integration-py
 
-# Vitest + Testcontainers (ephemeral Postgres). Build the workspace packages first so
-# the booted AppModule + Prisma client resolve.
+# Testcontainers (ephemeral Postgres). Build the workspace packages first so the
+# booted AppModule + Prisma client resolve. `test:integration` is Vitest (SessionService
+# SQL); `test:e2e` is the full-app GraphQL flow run as a plain ts-node process.
 test-integration-api:
 	pnpm turbo run build:package
 	pnpm --filter api-core test:integration
+	pnpm --filter api-core test:e2e
 
 # pgvector repository tests (Testcontainers).
 test-integration-py:
