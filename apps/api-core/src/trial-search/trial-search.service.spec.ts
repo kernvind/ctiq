@@ -52,6 +52,32 @@ describe('TrialSearchService', () => {
     });
   });
 
+  describe('getTrial', () => {
+    it('fetches the trial detail by nct id and returns it', async () => {
+      const detail = { nct_id: 'NCT01234567', brief_title: 'A study' };
+      http.get.mockReturnValue(of({ data: detail }));
+
+      const result = await service.getTrial('NCT01234567');
+
+      expect(result).toBe(detail);
+      expect(http.get).toHaveBeenCalledWith('/v1/search/trials/NCT01234567');
+    });
+
+    it('returns null when the trial is not found (upstream 404)', async () => {
+      http.get.mockReturnValue(throwError(() => axiosError(404, 'not found')));
+
+      await expect(service.getTrial('NCT00000000')).resolves.toBeNull();
+    });
+
+    it('translates a non-404 upstream failure into an HttpException', async () => {
+      http.get.mockReturnValue(throwError(() => axiosError(503, 'down')));
+
+      await expect(service.getTrial('NCT01234567')).rejects.toBeInstanceOf(
+        HttpException,
+      );
+    });
+  });
+
   describe('mapError (upstream error translation)', () => {
     const mapError = (e: AxiosError) =>
       (

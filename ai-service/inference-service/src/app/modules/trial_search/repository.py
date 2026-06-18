@@ -3,7 +3,7 @@ from typing import Optional, Sequence
 
 from src.app.infra.postgres.client import PostgresClient
 from src.app.modules.trial_search.planning.schemas import Field
-from src.app.modules.trial_search.schemas import TrialSearchResultRow
+from src.app.modules.trial_search.schemas import TrialDetail, TrialSearchResultRow
 from src.app.core.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -147,3 +147,67 @@ class TrialSearchRepository:
             results.append(TrialSearchResultRow.model_validate(d))
 
         return results
+
+    async def get_trial(self, nct_id: str) -> Optional[TrialDetail]:
+        """Fetch one trial's full record (+ child tables) by NCT id.
+
+        Search-agnostic: no embeddings or match context, so the same query backs the
+        detail page for both authed and anonymous (public) callers. Child collections
+        are aggregated as JSONB in a single round trip.
+        """
+        query = """
+        SELECT
+            t.nct_id,
+            t.brief_title, t.official_title, t.acronym, t.organization,
+            t.overall_status, t.start_date, t.completion_date,
+            t.primary_completion_date, t.last_update_post_date,
+            t.lead_sponsor_name, t.lead_sponsor_class, t.collaborators,
+            t.study_type, t.phases, t.allocation, t.intervention_model,
+            t.primary_purpose, t.masking, t.enrollment_count, t.enrollment_type,
+            t.conditions, t.keywords,
+            t.eligibility_criteria, t.min_age_years, t.max_age_years, t.sex,
+            t.std_ages, t.healthy_volunteers,
+            t.brief_summary, t.detailed_description,
+            t.central_contacts, t."references",
+            COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'facility', facility, 'city', city, 'state', state,
+                    'country', country, 'zip', zip, 'status', status
+                ) ORDER BY CASE WHEN status = 'RECRUITING' THEN 0 ELSE 1 END, country, facility)
+                FROM trial_locations WHERE nct_id = t.nct_id
+            ), '[]'::jsonb) AS locations,
+            COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'type', type, 'name', name, 'description', description
+                ) ORDER BY id)
+                FROM trial_interventions WHERE nct_id = t.nct_id
+            ), '[]'::jsonb) AS interventions,
+            COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'outcome_type', outcome_type, 'measure', measure,
+                    'description', description, 'time_frame', time_frame
+                ) ORDER BY CASE outcome_type WHEN 'PRIMARY' THEN 0 WHEN 'SECONDARY' THEN 1 ELSE 2 END, id)
+                FROM trial_outcomes WHERE nct_id = t.nct_id
+            ), '[]'::jsonb) AS outcomes,
+            COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'label', label, 'type', type, 'description', description
+                ) ORDER BY id)
+                FROM trial_arm_groups WHERE nct_id = t.nct_id
+            ), '[]'::jsonb) AS arm_groups,
+            COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                    'name', name, 'affiliation', affiliation, 'role', role
+                ) ORDER BY id)
+                FROM trial_officials WHERE nct_id = t.nct_id
+            ), '[]'::jsonb) AS officials
+        FROM clinical_trials t
+        WHERE t.nct_id = $1
+        """
+
+        rows = await self.pg.fetch(query, nct_id)
+        if not rows:
+            logger.info("get_trial: no trial found for nct_id=%s", nct_id)
+            return None
+
+        return TrialDetail.model_validate(dict(rows[0]))

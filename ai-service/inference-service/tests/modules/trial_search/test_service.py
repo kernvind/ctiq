@@ -51,3 +51,20 @@ def test_valid_query_plans_embeds_then_searches_with_plan_params():
     assert kwargs["top_k"] == 20
     assert kwargs["phase_filter"] == ("PHASE3",)
     assert result == []
+
+
+def test_get_trial_normalizes_id_and_delegates_to_repository():
+    service, repo, _, _ = make_service()
+    repo.get_trial = AsyncMock(return_value="sentinel")
+
+    result = asyncio.run(service.get_trial("  nct01234567 "))
+
+    repo.get_trial.assert_called_once_with("NCT01234567")
+    assert result == "sentinel"
+
+
+def test_get_trial_returns_none_when_not_found():
+    service, repo, _, _ = make_service()
+    repo.get_trial = AsyncMock(return_value=None)
+
+    assert asyncio.run(service.get_trial("NCT99999999")) is None

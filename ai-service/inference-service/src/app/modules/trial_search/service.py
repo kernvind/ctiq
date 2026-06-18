@@ -1,9 +1,9 @@
 import logging
-from typing import Sequence
+from typing import Optional, Sequence
 
 from src.app.modules.trial_search.hydrater import to_card
 from src.app.modules.trial_search.repository import TrialSearchRepository
-from src.app.modules.trial_search.schemas import TrialCard
+from src.app.modules.trial_search.schemas import TrialCard, TrialDetail
 from src.app.infra.embed.embedder import Embedder
 from src.app.modules.trial_search.planning.schemas import QueryPlan
 from src.app.modules.trial_search.planning.protocol import QueryPlannerProtocol
@@ -57,3 +57,13 @@ class TrialSearchService:
         )
         cards = [to_card(row) for row in results]
         return cards
+
+    async def get_trial(self, nct_id: str) -> Optional[TrialDetail]:
+        nct_id = nct_id.strip().upper()
+        if not nct_id:
+            return None
+        logger.info("Trial detail request received: nct_id=%s", nct_id)
+        detail = await self.repository.get_trial(nct_id)
+        if detail is None:
+            logger.info("Trial detail not found: nct_id=%s", nct_id)
+        return detail

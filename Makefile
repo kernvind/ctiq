@@ -1,4 +1,4 @@
-.PHONY: schema-generate install \
+.PHONY: schema-generate gen-api-types install \
         test test-js test-py \
         test-integration test-integration-api test-e2e test-integration-py test-all \
         docker-web-dashboard docker-api-core docker-inference docker-etl docker-all \
@@ -43,7 +43,9 @@ INFERENCE_DIR = ai-service/inference-service
 
 install:
 	pnpm install
-	cd $(INFERENCE_DIR) && poetry install --with dev
+	# `local` group pulls in ctiq-db (the trials ORM) used by the pgvector integration
+	# test to build its schema from the real models. dev-only; Docker uses --only main.
+	cd $(INFERENCE_DIR) && poetry install --with dev,local
 
 # ── Testing ────────────────────────────────────────────────────────────────────
 # Turbo only orchestrates the JS/TS packages, so the Python (pytest) and Docker-backed
@@ -90,6 +92,20 @@ test-all: test test-integration
 
 schema-generate:
 	pnpm turbo schema:generate --filter=api-core
+
+# ── Codegen: typed inference client ──────────────────────────────────────────────
+# api-core calls the inference service over HTTP; the request/response types in
+# apps/api-core/src/libs/clinical-search/src/api-types.ts are generated from FastAPI's
+# OpenAPI schema. Run after changing inference request/response (pydantic) schemas.
+#
+# Bridges Python -> TS: dump the OpenAPI (no server/model load — see scripts/dump_openapi.py)
+# then feed it to openapi-typescript (an api-core devDependency). Requires `make install`.
+INFERENCE_OPENAPI = /tmp/ctiq-inference-openapi.json
+API_TYPES_OUT     = src/libs/clinical-search/src/api-types.ts   # relative to apps/api-core
+
+gen-api-types:
+	cd $(INFERENCE_DIR) && PYTHONPATH=. .venv/bin/python scripts/dump_openapi.py > $(INFERENCE_OPENAPI)
+	pnpm --filter api-core exec openapi-typescript $(INFERENCE_OPENAPI) -o $(API_TYPES_OUT)
 
 # ── Docker image builds ────────────────────────────────────────────────────────
 

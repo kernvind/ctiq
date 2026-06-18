@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-  '/search/trials': {
+  '/api/v1/search/trials': {
     parameters: {
       query?: never;
       header?: never;
@@ -12,7 +12,24 @@ export interface paths {
       cookie?: never;
     };
     /** Search Trials */
-    get: operations['search_trials_search_trials_get'];
+    get: operations['search_trials_api_v1_search_trials_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/search/trials/{nct_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Trial */
+    get: operations['get_trial_api_v1_search_trials__nct_id__get'];
     put?: never;
     post?: never;
     delete?: never;
@@ -42,6 +59,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** Collaborator */
+    Collaborator: {
+      /** Name */
+      name?: string | null;
+      /** Class */
+      class?: string | null;
+    };
+    /** ContactInfo */
+    ContactInfo: {
+      /** Name */
+      name?: string | null;
+      /** Role */
+      role?: string | null;
+      /** Phone */
+      phone?: string | null;
+      /** Email */
+      email?: string | null;
+    };
     /** EligibilitySummary */
     EligibilitySummary: {
       /** Min Age Years */
@@ -107,6 +142,24 @@ export interface components {
       /** Distance */
       distance: number;
     };
+    /** Reference */
+    Reference: {
+      /** Citation */
+      citation?: string | null;
+      /** Type */
+      type?: string | null;
+      /** Pmid */
+      pmid?: string | null;
+    };
+    /** TrialArmGroupDetail */
+    TrialArmGroupDetail: {
+      /** Label */
+      label?: string | null;
+      /** Type */
+      type?: string | null;
+      /** Description */
+      description?: string | null;
+    };
     /** TrialCard */
     TrialCard: {
       /** Nct Id */
@@ -132,6 +185,165 @@ export interface components {
       /** Lead Sponsor Class */
       lead_sponsor_class: string;
     };
+    /** TrialDetail */
+    TrialDetail: {
+      /** Nct Id */
+      nct_id: string;
+      /** Brief Title */
+      brief_title?: string | null;
+      /** Official Title */
+      official_title?: string | null;
+      /** Acronym */
+      acronym?: string | null;
+      /** Organization */
+      organization?: string | null;
+      /** Overall Status */
+      overall_status?: string | null;
+      /** Start Date */
+      start_date?: string | null;
+      /** Completion Date */
+      completion_date?: string | null;
+      /** Primary Completion Date */
+      primary_completion_date?: string | null;
+      /** Last Update Post Date */
+      last_update_post_date?: string | null;
+      /** Lead Sponsor Name */
+      lead_sponsor_name?: string | null;
+      /** Lead Sponsor Class */
+      lead_sponsor_class?: string | null;
+      /**
+       * Collaborators
+       * @default []
+       */
+      collaborators: components['schemas']['Collaborator'][];
+      /** Study Type */
+      study_type?: string | null;
+      /**
+       * Phases
+       * @default []
+       */
+      phases: string[];
+      /** Allocation */
+      allocation?: string | null;
+      /** Intervention Model */
+      intervention_model?: string | null;
+      /** Primary Purpose */
+      primary_purpose?: string | null;
+      /** Masking */
+      masking?: string | null;
+      /** Enrollment Count */
+      enrollment_count?: number | null;
+      /** Enrollment Type */
+      enrollment_type?: string | null;
+      /**
+       * Conditions
+       * @default []
+       */
+      conditions: string[];
+      /**
+       * Keywords
+       * @default []
+       */
+      keywords: string[];
+      /** Eligibility Criteria */
+      eligibility_criteria?: string | null;
+      /** Min Age Years */
+      min_age_years?: number | null;
+      /** Max Age Years */
+      max_age_years?: number | null;
+      /** Sex */
+      sex?: string | null;
+      /**
+       * Std Ages
+       * @default []
+       */
+      std_ages: string[];
+      /** Healthy Volunteers */
+      healthy_volunteers?: boolean | null;
+      /** Brief Summary */
+      brief_summary?: string | null;
+      /** Detailed Description */
+      detailed_description?: string | null;
+      /**
+       * Central Contacts
+       * @default []
+       */
+      central_contacts: components['schemas']['ContactInfo'][];
+      /**
+       * References
+       * @default []
+       */
+      references: components['schemas']['Reference'][];
+      /**
+       * Locations
+       * @default []
+       */
+      locations: components['schemas']['TrialLocationDetail'][];
+      /**
+       * Interventions
+       * @default []
+       */
+      interventions: components['schemas']['TrialInterventionDetail'][];
+      /**
+       * Outcomes
+       * @default []
+       */
+      outcomes: components['schemas']['TrialOutcomeDetail'][];
+      /**
+       * Arm Groups
+       * @default []
+       */
+      arm_groups: components['schemas']['TrialArmGroupDetail'][];
+      /**
+       * Officials
+       * @default []
+       */
+      officials: components['schemas']['TrialOfficialDetail'][];
+    };
+    /** TrialInterventionDetail */
+    TrialInterventionDetail: {
+      /** Type */
+      type?: string | null;
+      /** Name */
+      name?: string | null;
+      /** Description */
+      description?: string | null;
+    };
+    /** TrialLocationDetail */
+    TrialLocationDetail: {
+      /** Facility */
+      facility?: string | null;
+      /** City */
+      city?: string | null;
+      /** State */
+      state?: string | null;
+      /** Country */
+      country?: string | null;
+      /** Zip */
+      zip?: string | null;
+      /** Status */
+      status?: string | null;
+    };
+    /** TrialOfficialDetail */
+    TrialOfficialDetail: {
+      /** Name */
+      name?: string | null;
+      /** Affiliation */
+      affiliation?: string | null;
+      /** Role */
+      role?: string | null;
+    };
+    /** TrialOutcomeDetail */
+    TrialOutcomeDetail: {
+      /** Outcome Type */
+      outcome_type?: string | null;
+      /** Measure */
+      measure?: string | null;
+      /** Description */
+      description?: string | null;
+      /** Time Frame */
+      time_frame?: string | null;
+    };
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -154,13 +366,15 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  search_trials_search_trials_get: {
+  search_trials_api_v1_search_trials_get: {
     parameters: {
       query: {
         /** @description Search query */
         q: string;
       };
-      header?: never;
+      header?: {
+        'x-internal-token'?: string | null;
+      };
       path?: never;
       cookie?: never;
     };
@@ -173,6 +387,40 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TrialCard'][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  get_trial_api_v1_search_trials__nct_id__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        'x-internal-token'?: string | null;
+      };
+      path: {
+        /** @description ClinicalTrials.gov NCT id */
+        nct_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TrialDetail'];
         };
       };
       /** @description Validation Error */

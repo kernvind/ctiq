@@ -7,6 +7,20 @@ type AuthPayload {
   refreshToken: String!
 }
 
+type Collaborator {
+  name: String
+
+  """Sponsor Class"""
+  sponsor_class: String
+}
+
+type ContactInfo {
+  email: String
+  name: String
+  phone: String
+  role: String
+}
+
 type EligibilitySummary {
   accepts_healthy_volunteers: Boolean!
 
@@ -65,6 +79,13 @@ type Mutation {
 type Query {
   health: String!
   searchTrials(q: SearchTrialInput!): [TrialCard!]!
+  trial(nctId: String!): TrialDetail
+}
+
+type Reference {
+  citation: String
+  pmid: String
+  type: String
 }
 
 input SearchTrialInput {
@@ -84,6 +105,12 @@ enum SignupRole {
   ANALYST
   CLINICIAN
   PATIENT
+}
+
+type TrialArmGroup {
+  description: String
+  label: String
+  type: String
 }
 
 type TrialCard {
@@ -108,4 +135,125 @@ type TrialCard {
 
   """Top Chunks"""
   top_chunks: [MatchingChunk!]!
+}
+
+type TrialDetail {
+  acronym: String
+  allocation: String
+  arm_groups: [TrialArmGroup!]!
+
+  """Brief Summary"""
+  brief_summary: String
+
+  """Brief Title"""
+  brief_title: String
+  central_contacts: [ContactInfo!]!
+  collaborators: [Collaborator!]!
+
+  """Completion Date"""
+  completion_date: String
+
+  """Conditions"""
+  conditions: [String!]!
+
+  """Detailed Description"""
+  detailed_description: String
+
+  """Eligibility Criteria"""
+  eligibility_criteria: String
+
+  """Enrollment Count"""
+  enrollment_count: Int
+
+  """Enrollment Type"""
+  enrollment_type: String
+
+  """Healthy Volunteers"""
+  healthy_volunteers: Boolean
+
+  """Intervention Model"""
+  intervention_model: String
+  interventions: [TrialIntervention!]!
+
+  """Keywords"""
+  keywords: [String!]!
+
+  """Last Update Post Date"""
+  last_update_post_date: String
+
+  """Lead Sponsor Class"""
+  lead_sponsor_class: String
+
+  """Lead Sponsor Name"""
+  lead_sponsor_name: String
+  locations: [TrialLocationDetail!]!
+  masking: String
+
+  """Max Age Years"""
+  max_age_years: Float
+
+  """Min Age Years"""
+  min_age_years: Float
+  nct_id: String!
+
+  """Official Title"""
+  official_title: String
+  officials: [TrialOfficial!]!
+  organization: String
+  outcomes: [TrialOutcome!]!
+
+  """Overall Status"""
+  overall_status: String
+
+  """Phases"""
+  phases: [String!]!
+
+  """Primary Completion Date"""
+  primary_completion_date: String
+
+  """Primary Purpose"""
+  primary_purpose: String
+  references: [Reference!]!
+  sex: String
+
+  """Start Date"""
+  start_date: String
+
+  """Std Ages"""
+  std_ages: [String!]!
+
+  """Study Type"""
+  study_type: String
+}
+
+type TrialIntervention {
+  description: String
+  name: String
+  type: String
+}
+
+type TrialLocationDetail {
+  city: String
+  country: String
+  facility: String
+  state: String
+  status: String
+  zip: String
+}
+
+type TrialOfficial {
+  affiliation: String
+  name: String
+  role: String
+}
+
+type TrialOutcome {
+  description: String
+  measure: String
+
+  """Outcome Type"""
+  outcome_type: String
+
+  """Time Frame"""
+  time_frame: String
 }
