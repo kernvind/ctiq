@@ -15,6 +15,11 @@ export default defineConfig({
     environment: 'node',
     pool: 'forks',
     fileParallelism: false,
+    // Force production logging: in dev mode the app's pino logger spawns a pino-pretty
+    // transport worker thread, which is flaky inside Vitest's forked worker (crashes CI
+    // with "Worker exited unexpectedly"). Production mode emits plain JSON, no transport.
+    // Set here so it's in effect before AppModule (and its LoggerModule) is imported.
+    env: { NODE_ENV: 'production' },
   },
   plugins: [
     swc.vite({
