@@ -45,7 +45,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     // 🟢 REST PATH
     const res = context.response;
-    res.status(normalized.status).json({
+    // `.send()` (not `.json()`): the app runs on Fastify, whose reply has no `.json()`.
+    // `.send(obj)` serializes to JSON on both Fastify and Express.
+    res.status(normalized.status).send({
       statusCode: normalized.status,
       message: this.clientMessage(normalized.status, normalized.message),
       error: normalized.errorType,

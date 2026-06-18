@@ -124,6 +124,8 @@ export class SessionService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
-    this.logger.warn(`revoked all sessions userId=${userId} count=${result.count}`);
+    this.logger.warn(
+      `revoked all sessions userId=${userId} count=${result.count}`,
+    );
   }
 }

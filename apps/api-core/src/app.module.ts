@@ -7,6 +7,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { LoggerModule } from 'nestjs-pino';
 
 import { buildLoggerParams } from './common/logging/logger.params';
+import { formatGraphQLError } from './common/graphql/format-error';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TrialSearchModule } from './trial-search/trial-search.module';
@@ -45,6 +46,11 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
       driver: ApolloDriver,
       autoSchemaFile: join(process.cwd(), 'schema.gql'),
       sortSchema: true,
+      // Never leak stack traces or internal error detail to the client — covers
+      // Apollo-layer errors (validation/serialization) that bypass the resolver
+      // and GlobalExceptionFilter. See common/graphql/format-error.ts.
+      includeStacktraceInErrorResponses: false,
+      formatError: formatGraphQLError,
     }),
   ],
   controllers: [AppController],

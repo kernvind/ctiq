@@ -60,6 +60,13 @@
         "^check-types"
       ]
     },
+    "test": {
+      "dependsOn": [
+        "^build",
+        "^build:package"
+      ],
+      "outputs": []
+    },
     "dev": {
       "dependsOn": [
         "^db:generate",

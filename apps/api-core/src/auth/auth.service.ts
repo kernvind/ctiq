@@ -36,7 +36,9 @@ export class AuthService {
     private readonly sessionService: SessionService,
   ) {}
 
-  private signAccessToken(user: Pick<UserRecord, 'id' | 'username' | 'role'>): string {
+  private signAccessToken(
+    user: Pick<UserRecord, 'id' | 'username' | 'role'>,
+  ): string {
     return this.jwtService.sign({
       sub: user.id,
       username: user.username,
@@ -65,7 +67,10 @@ export class AuthService {
   }
 
   /** Rotate a refresh token and mint a fresh access token for its owner. */
-  async refresh(refreshToken: string, meta: SessionMeta = {}): Promise<AuthTokens> {
+  async refresh(
+    refreshToken: string,
+    meta: SessionMeta = {},
+  ): Promise<AuthTokens> {
     const { userId, refreshToken: newRefreshToken } =
       await this.sessionService.rotate(refreshToken, meta);
 
@@ -105,7 +110,9 @@ export class AuthService {
     }
 
     const role = SIGNUP_ROLE_TO_ROLE[dto.role];
-    this.logger.log(`signup: creating user username=${dto.username} role=${role}`);
+    this.logger.log(
+      `signup: creating user username=${dto.username} role=${role}`,
+    );
 
     let user: UserRecord;
     try {

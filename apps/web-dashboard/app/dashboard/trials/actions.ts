@@ -1,9 +1,8 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { getAuthedSdk } from "@repo/generated-schemas-web";
 import { ZodTrialSearchSchema } from "@repo/zod-validations";
 import { flattenZodErrors } from "@/lib/zod-errors";
+import { withAuthedSdk } from "@/lib/authed-sdk";
 import type { TrialCard } from "@repo/generated-schemas-web";
 
 export type SearchState = {
@@ -23,12 +22,12 @@ export async function searchTrials(
     return { error: flattenZodErrors(result.error), query: String(rawQuery ?? "") };
   }
 
-  const cookieStore = await cookies();
-  const token = cookieStore.get("token")?.value;
-
   try {
-    const sdk = token ? getAuthedSdk(token) : (await import("@repo/generated-schemas-web")).sdk;
-    const data = await sdk.searchTrials_query({ q: { q: result.data.q } });
+    // Auto-refreshes the access token (rotating the refresh token) and retries once
+    // if the call fails with an auth error.
+    const data = await withAuthedSdk((sdk) =>
+      sdk.searchTrials_query({ q: { q: result.data.q } }),
+    );
     return { results: data.searchTrials, query: result.data.q };
   } catch (err: unknown) {
     const message =
