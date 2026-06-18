@@ -76,5 +76,9 @@ jobs:
       - name: Install inference deps
         working-directory: ai-service/inference-service
         run: poetry install --with dev
-      - name: Integration tests (api-core + inference)
-        run: make test-integration
+      - name: api-core SQL integration (Testcontainers)
+        run: make test-integration-api
+      - name: api-core app e2e (Testcontainers)
+        run: make test-e2e
+      - name: inference pgvector integration (Testcontainers)
+        run: make test-integration-py

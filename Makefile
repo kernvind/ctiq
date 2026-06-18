@@ -1,6 +1,6 @@
 .PHONY: schema-generate install \
         test test-js test-py \
-        test-integration test-integration-api test-integration-py test-all \
+        test-integration test-integration-api test-e2e test-integration-py test-all \
         docker-web-dashboard docker-api-core docker-inference docker-etl docker-all \
         up-api down-api logs-api \
         up-web down-web logs-web \
@@ -65,17 +65,22 @@ test-js:
 test-py:
 	cd $(INFERENCE_DIR) && bash -c 'source .venv/bin/activate && python -m pytest'
 
-test-integration: test-integration-api test-integration-py
+test-integration: test-integration-api test-e2e test-integration-py
 
-# Testcontainers (ephemeral Postgres). Build the workspace packages first so the
-# booted AppModule + Prisma client resolve. `test:integration` is Vitest (SessionService
-# SQL); `test:e2e` is the full-app GraphQL flow run as a plain ts-node process.
+# api-core SQL integration — Vitest + Testcontainers (SessionService). Build the
+# workspace packages first so the Prisma client resolves.
 test-integration-api:
 	pnpm turbo run build:package
 	pnpm --filter api-core test:integration
+
+# Full-app GraphQL e2e — boots the real AppModule against Testcontainers as a plain
+# ts-node process (not a test-runner worker). Kept separate from the SQL integration so
+# failures are clearly attributable.
+test-e2e:
+	pnpm turbo run build:package
 	pnpm --filter api-core test:e2e
 
-# pgvector repository tests (Testcontainers).
+# inference pgvector repository tests (Testcontainers).
 test-integration-py:
 	cd $(INFERENCE_DIR) && bash -c 'source .venv/bin/activate && python -m pytest -m integration'
 

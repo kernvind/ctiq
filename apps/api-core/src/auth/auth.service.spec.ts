@@ -3,8 +3,8 @@ import { Role } from '@repo/db';
 import { SignupRole } from '@repo/graphql-types';
 import { AuthService } from './auth.service';
 
-jest.mock('bcrypt', () => ({ compare: jest.fn(), hash: jest.fn() }));
-import { compare, hash } from 'bcrypt';
+jest.mock('bcryptjs', () => ({ compare: jest.fn(), hash: jest.fn() }));
+import { compare, hash } from 'bcryptjs';
 const compareMock = compare as jest.Mock;
 const hashMock = hash as jest.Mock;
 

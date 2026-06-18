@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { compare, hash } from 'bcrypt';
+import { compare, hash } from 'bcryptjs';
 import { Role } from '@repo/db';
 import { UsersService, UserRecord } from '../users/users.service';
 import { LoginInput, SignupInput, SignupRole } from '@repo/graphql-types';
