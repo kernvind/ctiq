@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { searchTrials, type SearchState } from "@/app/dashboard/trials/actions";
@@ -53,7 +54,13 @@ export function TrialSearchForm() {
           </p>
           <div className="flex flex-col gap-4">
             {state.results.map((trial) => (
-              <TrialCard key={trial.nct_id} trial={trial} />
+              <Link
+                key={trial.nct_id}
+                href={`/dashboard/trials/${trial.nct_id}`}
+                className="block rounded-xl outline-none transition hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <TrialCard trial={trial} />
+              </Link>
             ))}
           </div>
           {state.results.length === 0 && (

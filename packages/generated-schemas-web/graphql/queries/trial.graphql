@@ -1,0 +1,78 @@
+query trial_query($nctId: String!) {
+  trial(nctId: $nctId) {
+    acronym
+    allocation
+    arm_groups {
+      description
+      label
+      type
+    }
+    brief_summary
+    brief_title
+    central_contacts {
+      email
+      name
+      phone
+      role
+    }
+    collaborators {
+      name
+      sponsor_class
+    }
+    completion_date
+    conditions
+    detailed_description
+    eligibility_criteria
+    enrollment_count
+    enrollment_type
+    healthy_volunteers
+    intervention_model
+    interventions {
+      description
+      name
+      type
+    }
+    keywords
+    last_update_post_date
+    lead_sponsor_class
+    lead_sponsor_name
+    locations {
+      city
+      country
+      facility
+      state
+      status
+      zip
+    }
+    masking
+    max_age_years
+    min_age_years
+    nct_id
+    official_title
+    officials {
+      affiliation
+      name
+      role
+    }
+    organization
+    outcomes {
+      description
+      measure
+      outcome_type
+      time_frame
+    }
+    overall_status
+    phases
+    primary_completion_date
+    primary_purpose
+    references {
+      citation
+      pmid
+      type
+    }
+    sex
+    start_date
+    std_ages
+    study_type
+  }
+}
