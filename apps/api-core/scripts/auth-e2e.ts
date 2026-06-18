@@ -12,6 +12,7 @@ import 'reflect-metadata';
 import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
+import { writeSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import {
   FastifyAdapter,
@@ -50,10 +51,13 @@ async function main(): Promise<void> {
   process.env.REFRESH_TOKEN_TTL_DAYS = '30';
   process.env.NODE_ENV = 'production';
 
+  // abortOnError:false -> a bootstrap error is THROWN (so we can report it) instead of
+  // Nest logging it and calling process.exit(1) silently. Logger stays on so Nest also
+  // prints what failed (NODE_ENV=production -> JSON, no pino-pretty transport worker).
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter(),
-    { logger: false },
+    { abortOnError: false },
   );
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
@@ -152,7 +156,16 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(err);
+// Use writeSync to fd 2 so the error always reaches the (piped) CI log — console.error
+// + process.exit can truncate buffered stdio before it flushes.
+function fatal(label: string, err: unknown): never {
+  const detail =
+    err instanceof Error ? (err.stack ?? err.message) : String(err);
+  writeSync(2, `\n[auth-e2e] ${label}:\n${detail}\n`);
   process.exit(1);
-});
+}
+
+process.on('unhandledRejection', (err) => fatal('UNHANDLED REJECTION', err));
+process.on('uncaughtException', (err) => fatal('UNCAUGHT EXCEPTION', err));
+
+main().catch((err) => fatal('FAILED', err));
