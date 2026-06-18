@@ -22,3 +22,14 @@ export function getPrismaClient(connectionString: string): PrismaClient {
 
   return client;
 }
+
+/**
+ * Always create a fresh, non-cached Prisma client for a specific connection string.
+ * Unlike getPrismaClient (a process-wide singleton), this is for tests and any caller
+ * that needs an isolated client (e.g. an ephemeral test database).
+ */
+export function createPrismaClient(connectionString: string): PrismaClient {
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+  });
+}

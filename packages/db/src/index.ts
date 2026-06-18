@@ -1,4 +1,4 @@
-export { getPrismaClient } from "./client"; // exports instance of prisma
+export { getPrismaClient, createPrismaClient } from "./client"; // exports instance of prisma
 export * from "./generated/prisma/client"; // exports generated types from prisma
 export {
   PrismaClientKnownRequestError,
