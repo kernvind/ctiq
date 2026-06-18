@@ -1,4 +1,6 @@
-.PHONY: schema-generate \
+.PHONY: schema-generate install \
+        test test-js test-py \
+        test-integration test-integration-api test-integration-py test-all \
         docker-web-dashboard docker-api-core docker-inference docker-etl docker-all \
         up-api down-api logs-api \
         up-web down-web logs-web \
@@ -33,6 +35,49 @@ tf-plan-shared:
 
 tf-apply-shared:
 	cd infra/terraform/shared && terraform apply tfplan
+
+# ── Setup ──────────────────────────────────────────────────────────────────────
+# One-time / CI dependency install. Run before `make test` / `make test-integration`.
+
+INFERENCE_DIR = ai-service/inference-service
+
+install:
+	pnpm install
+	cd $(INFERENCE_DIR) && poetry install --with dev
+
+# ── Testing ────────────────────────────────────────────────────────────────────
+# Turbo only orchestrates the JS/TS packages, so the Python (pytest) and Docker-backed
+# integration suites have no home in `turbo test`. These targets are the single entry
+# point across all three services.
+#
+#   make test              # fast gate, NO Docker: JS/TS (Turbo) + Python unit
+#   make test-integration  # Docker required: Testcontainers suites (api-core + inference)
+#   make test-all          # everything
+#
+# Run `make install` first (installs JS + Python deps, incl. the pytest dev group).
+
+test: test-js test-py
+
+test-js:
+	pnpm turbo run test
+
+# inference-service unit tests (integration tests are excluded by default in pyproject).
+test-py:
+	cd $(INFERENCE_DIR) && bash -c 'source .venv/bin/activate && python -m pytest'
+
+test-integration: test-integration-api test-integration-py
+
+# Vitest + Testcontainers (ephemeral Postgres). Build the workspace packages first so
+# the booted AppModule + Prisma client resolve.
+test-integration-api:
+	pnpm turbo run build:package
+	pnpm --filter api-core test:integration
+
+# pgvector repository tests (Testcontainers).
+test-integration-py:
+	cd $(INFERENCE_DIR) && bash -c 'source .venv/bin/activate && python -m pytest -m integration'
+
+test-all: test test-integration
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
 
