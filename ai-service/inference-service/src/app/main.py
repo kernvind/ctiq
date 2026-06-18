@@ -9,7 +9,7 @@ from src.app.api.security import verify_internal_token
 from src.app.core.config import get_settings
 from src.app.core.set_logger import configure_logging
 from src.app.infra.embed.embedder import Embedder
-from src.app.infra.postgres.client import PostgresClient, create_pool
+from src.app.infra.postgres.session import create_engine, create_session_factory
 from src.app.modules.trial_search.planning.rule_based_planner import RuleBasedQueryPlanner
 
 settings = get_settings()
@@ -31,13 +31,14 @@ async def lifespan(app: FastAPI):
     )
     app.state.embedder = Embedder(model)
 
-    pool = await create_pool(settings.asyncpg_database_url)
-    app.state.pg_client = PostgresClient(pool)
+    engine = create_engine(settings.pg_database_url)
+    app.state.db_engine = engine
+    app.state.db_sessionmaker = create_session_factory(engine)
     app.state.query_planner = RuleBasedQueryPlanner()
 
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
-    await pool.close()
+    await engine.dispose()
 
     if device == "mps":
         torch.mps.empty_cache()

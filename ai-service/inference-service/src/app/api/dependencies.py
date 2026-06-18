@@ -1,19 +1,26 @@
-from typing import Annotated
+from typing import Annotated, AsyncIterator
 
 from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.app.modules.trial_search.repository import TrialSearchRepository
 from src.app.modules.trial_search.service import TrialSearchService
 from src.app.modules.trial_search.planning.rule_based_planner import RuleBasedQueryPlanner
-from src.app.infra.postgres.client import PostgresClient
 from src.app.infra.embed.embedder import Embedder
 from src.app.core.config import get_settings, Settings
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-def get_pg_client(request: Request) -> PostgresClient:
-    return request.app.state.pg_client
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
+    return request.app.state.db_sessionmaker
+
+
+async def get_session(
+    factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)],
+) -> AsyncIterator[AsyncSession]:
+    async with factory() as session:
+        yield session
 
 
 def get_embedder(request: Request) -> Embedder:
@@ -25,10 +32,10 @@ def get_query_planner(request: Request) -> RuleBasedQueryPlanner:
 
 
 def get_trial_search_repository(
-    pg: Annotated[PostgresClient, Depends(get_pg_client)],
+    session: Annotated[AsyncSession, Depends(get_session)],
     settings: SettingsDep,
 ) -> TrialSearchRepository:
-    return TrialSearchRepository(pg=pg, settings=settings)
+    return TrialSearchRepository(session=session, settings=settings)
 
 
 def get_trial_search_service(

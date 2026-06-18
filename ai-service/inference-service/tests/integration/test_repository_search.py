@@ -1,11 +1,10 @@
 """Integration tests for TrialSearchRepository against a real pgvector Postgres
-(Testcontainers). Verifies the actual SQL: vector_search (nearest-neighbour ordering,
-phase pre-filter, field-type filtering, location aggregation) and get_trial.
+(Testcontainers), exercising the SQLAlchemy async ORM end to end.
 
-The schema is created from ctiq-db's ORM metadata (not hand-written DDL), so a column
-rename/removal in the trials domain breaks these tests — that's the drift guard that
-lets the repository keep using raw asyncpg SQL safely. Requires the `local` poetry
-group (ctiq-db); see Makefile `test-integration-py`.
+The schema is created from ctiq-db's ORM metadata (Base.metadata.create_all), so the
+test tables are exactly the production tables — a column rename/removal in the trials
+domain breaks these tests. Seeding goes through the ORM too, so this also covers the
+pgvector bind path (embedding inserts + cosine_distance search).
 
 Docker required. Run with: pytest -m integration
 """
@@ -14,23 +13,28 @@ from datetime import date, datetime, timezone
 
 import asyncpg
 import pytest
+from sqlalchemy import text
 from testcontainers.core.container import DockerContainer
 
-# NOTE: ctiq_db (the trials ORM, optional `local` poetry group) and sqlalchemy are
-# imported lazily inside _create_trials_schema — NOT at module top. pytest imports this
-# module during collection even for the unit run (`-m 'not integration'`), and the unit
-# job intentionally doesn't install the trials ORM. Keep these imports lazy.
+from ctiq_db import (
+    Base,
+    ClinicalTrial,
+    TrialArmGroup,
+    TrialEmbedding,
+    TrialIntervention,
+    TrialLocation,
+    TrialOfficial,
+    TrialOutcome,
+)
 
 from src.app.core.config import Settings
-from src.app.infra.postgres.client import PostgresClient, create_pool
+from src.app.infra.postgres.session import create_engine, create_session_factory
 from src.app.modules.trial_search.planning.schemas import Field
 from src.app.modules.trial_search.repository import TrialSearchRepository
 
 pytestmark = pytest.mark.integration
 
 EMBED_DIM = 768
-
-# NOT NULL bookkeeping columns shared by the real ORM tables; the seeds must supply them.
 INGEST_DATE = date(2024, 1, 1)
 INGESTED_AT = datetime(2024, 1, 1, tzinfo=timezone.utc)
 MODEL_VERSION = "test-model-v1"
@@ -49,6 +53,7 @@ B_VEC = _vec((1, 1.0))
 C_VEC = _vec((2, 1.0))
 QUERY = _vec((0, 1.0), (1, 0.3))
 
+
 async def _wait_ready(url: str, attempts: int = 40) -> None:
     for _ in range(attempts):
         try:
@@ -60,113 +65,78 @@ async def _wait_ready(url: str, attempts: int = 40) -> None:
     raise RuntimeError("postgres did not become ready in time")
 
 
-async def _create_trials_schema(conn: asyncpg.Connection) -> None:
-    """Create the trials schema from ctiq-db's ORM metadata so the test tables are
-    exactly the production tables. Compiles each model's CREATE TABLE for Postgres and
-    runs it over asyncpg (no SQLAlchemy engine / sync driver needed)."""
-    from ctiq_db import Base
-    from sqlalchemy.dialects import postgresql
-    from sqlalchemy.schema import CreateTable
-
-    await conn.execute("CREATE SCHEMA IF NOT EXISTS trials")
-    # Install pgvector into `public`: create_pool's register_vector resolves the type as
-    # `public.vector`. The unqualified `vector(768)` column type still resolves via the
-    # search_path below (public is on it).
-    await conn.execute("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public")
-    await conn.execute("SET search_path TO trials, public")
-    for table in Base.metadata.sorted_tables:
-        ddl = str(CreateTable(table).compile(dialect=postgresql.dialect()))
-        await conn.execute(ddl)
-
-
 async def _setup(url: str):
     await _wait_ready(url)
+    engine = create_engine(url)
+    # Create the pgvector extension + schema, then all tables from the ORM metadata.
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS trials"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public"))
+        await conn.run_sync(Base.metadata.create_all)
 
-    # Build the schema on a raw connection: the `vector` type must exist before
-    # create_pool's register_vector runs.
-    raw = await asyncpg.connect(url)
-    await _create_trials_schema(raw)
-    await raw.close()
+    session_factory = create_session_factory(engine)
+    async with session_factory() as session:
+        session.add_all(
+            [
+                ClinicalTrial(
+                    nct_id="NCT-A", brief_title="Trial A", overall_status="RECRUITING",
+                    phases=["PHASE2"], conditions=[], lead_sponsor_name="Sponsor A",
+                    lead_sponsor_class="INDUSTRY", ingestion_date=INGEST_DATE, ingested_at=INGESTED_AT,
+                    official_title="Official Trial A", detailed_description="Long description",
+                    eligibility_criteria="Inclusion: adults", study_type="INTERVENTIONAL",
+                    collaborators=[{"name": "Acme", "class": "INDUSTRY"}],
+                    central_contacts=[{"name": "Coord", "role": "CONTACT", "phone": "555", "email": "a@b.co"}],
+                    references=[{"citation": "Smith 2020", "type": "BACKGROUND", "pmid": "123"}],
+                ),
+                ClinicalTrial(
+                    nct_id="NCT-B", brief_title="Trial B", overall_status="RECRUITING",
+                    phases=["PHASE3"], conditions=[], lead_sponsor_name="Sponsor B",
+                    lead_sponsor_class="INDUSTRY", ingestion_date=INGEST_DATE, ingested_at=INGESTED_AT,
+                ),
+                ClinicalTrial(
+                    nct_id="NCT-C", brief_title="Trial C", overall_status="RECRUITING",
+                    phases=["PHASE1"], conditions=[], lead_sponsor_name="Sponsor C",
+                    lead_sponsor_class="OTHER", ingestion_date=INGEST_DATE, ingested_at=INGESTED_AT,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                TrialEmbedding(nct_id="NCT-A", field_type="summary", chunk_id=0, chunk_text="A summary chunk",
+                               source_hash="h1", model_version=MODEL_VERSION, embedding=A_VEC, ingested_at=INGESTED_AT),
+                TrialEmbedding(nct_id="NCT-A", field_type="title", chunk_id=0, chunk_text="A title chunk",
+                               source_hash="h2", model_version=MODEL_VERSION, embedding=A_VEC, ingested_at=INGESTED_AT),
+                TrialEmbedding(nct_id="NCT-B", field_type="summary", chunk_id=0, chunk_text="B summary chunk",
+                               source_hash="h3", model_version=MODEL_VERSION, embedding=B_VEC, ingested_at=INGESTED_AT),
+                TrialEmbedding(nct_id="NCT-C", field_type="summary", chunk_id=0, chunk_text="C summary chunk",
+                               source_hash="h4", model_version=MODEL_VERSION, embedding=C_VEC, ingested_at=INGESTED_AT),
+            ]
+        )
+        session.add_all(
+            [
+                TrialLocation(nct_id="NCT-A", facility="Site 1", city="New York", state="NY",
+                              country="USA", status="RECRUITING", ingestion_date=INGEST_DATE),
+                TrialLocation(nct_id="NCT-A", facility="Site 2", city="Los Angeles", state="CA",
+                              country="USA", status="COMPLETED", ingestion_date=INGEST_DATE),
+            ]
+        )
+        session.add_all(
+            [
+                TrialIntervention(nct_id="NCT-A", type="DRUG", name="Compound X",
+                                  description="10mg daily", ingestion_date=INGEST_DATE),
+                TrialOutcome(nct_id="NCT-A", outcome_type="SECONDARY", measure="PFS",
+                             time_frame="12mo", ingestion_date=INGEST_DATE),
+                TrialOutcome(nct_id="NCT-A", outcome_type="PRIMARY", measure="Overall survival",
+                             time_frame="24mo", ingestion_date=INGEST_DATE),
+                TrialArmGroup(nct_id="NCT-A", label="Arm 1", type="EXPERIMENTAL",
+                              description="Gets X", ingestion_date=INGEST_DATE),
+                TrialOfficial(nct_id="NCT-A", name="Dr Jane", affiliation="Big Hospital",
+                              role="PRINCIPAL_INVESTIGATOR", ingestion_date=INGEST_DATE),
+            ]
+        )
+        await session.commit()
 
-    pool = await create_pool(url)
-    async with pool.acquire() as conn:
-        # ingestion_date / ingested_at are NOT NULL on the real tables.
-        await conn.executemany(
-            "INSERT INTO trials.clinical_trials "
-            "(nct_id, brief_title, overall_status, phases, conditions, lead_sponsor_name, "
-            " lead_sponsor_class, ingestion_date, ingested_at) "
-            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-            [
-                ("NCT-A", "Trial A", "RECRUITING", ["PHASE2"], [], "Sponsor A", "INDUSTRY", INGEST_DATE, INGESTED_AT),
-                ("NCT-B", "Trial B", "RECRUITING", ["PHASE3"], [], "Sponsor B", "INDUSTRY", INGEST_DATE, INGESTED_AT),
-                ("NCT-C", "Trial C", "RECRUITING", ["PHASE1"], [], "Sponsor C", "OTHER", INGEST_DATE, INGESTED_AT),
-            ],
-        )
-        # trial_embeddings PK is (nct_id, field_type, chunk_id); source_hash, model_version,
-        # ingested_at are NOT NULL.
-        await conn.executemany(
-            "INSERT INTO trials.trial_embeddings "
-            "(nct_id, field_type, chunk_id, chunk_text, source_hash, model_version, embedding, ingested_at) "
-            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-            [
-                ("NCT-A", "summary", 0, "A summary chunk", "h1", MODEL_VERSION, A_VEC, INGESTED_AT),
-                ("NCT-A", "title", 0, "A title chunk", "h2", MODEL_VERSION, A_VEC, INGESTED_AT),
-                ("NCT-B", "summary", 0, "B summary chunk", "h3", MODEL_VERSION, B_VEC, INGESTED_AT),
-                ("NCT-C", "summary", 0, "C summary chunk", "h4", MODEL_VERSION, C_VEC, INGESTED_AT),
-            ],
-        )
-        await conn.executemany(
-            "INSERT INTO trials.trial_locations "
-            "(nct_id, facility, city, state, country, status, ingestion_date) "
-            "VALUES ($1,$2,$3,$4,$5,$6,$7)",
-            [
-                ("NCT-A", "Site 1", "New York", "NY", "USA", "RECRUITING", INGEST_DATE),
-                ("NCT-A", "Site 2", "Los Angeles", "CA", "USA", "COMPLETED", INGEST_DATE),
-            ],
-        )
-
-        # Extra detail data for NCT-A so get_trial has a rich record to assemble.
-        await conn.execute(
-            """UPDATE trials.clinical_trials SET
-                 official_title = 'Official Trial A',
-                 detailed_description = 'Long description',
-                 eligibility_criteria = 'Inclusion: adults',
-                 study_type = 'INTERVENTIONAL',
-                 collaborators = $2::jsonb,
-                 central_contacts = $3::jsonb,
-                 "references" = $4::jsonb
-               WHERE nct_id = $1""",
-            "NCT-A",
-            # Pass Python objects (not JSON strings): the pool's jsonb codec encodes via
-            # json.dumps, so a string here would be double-encoded.
-            [{"name": "Acme", "class": "INDUSTRY"}],
-            [{"name": "Coord", "role": "CONTACT", "phone": "555", "email": "a@b.co"}],
-            [{"citation": "Smith 2020", "type": "BACKGROUND", "pmid": "123"}],
-        )
-        await conn.executemany(
-            "INSERT INTO trials.trial_interventions (nct_id, type, name, description, ingestion_date) VALUES ($1,$2,$3,$4,$5)",
-            [("NCT-A", "DRUG", "Compound X", "10mg daily", INGEST_DATE)],
-        )
-        await conn.executemany(
-            "INSERT INTO trials.trial_outcomes (nct_id, outcome_type, measure, description, time_frame, ingestion_date) VALUES ($1,$2,$3,$4,$5,$6)",
-            [
-                ("NCT-A", "SECONDARY", "PFS", None, "12mo", INGEST_DATE),
-                ("NCT-A", "PRIMARY", "Overall survival", None, "24mo", INGEST_DATE),
-            ],
-        )
-        await conn.executemany(
-            "INSERT INTO trials.trial_arm_groups (nct_id, label, type, description, ingestion_date) VALUES ($1,$2,$3,$4,$5)",
-            [("NCT-A", "Arm 1", "EXPERIMENTAL", "Gets X", INGEST_DATE)],
-        )
-        await conn.executemany(
-            "INSERT INTO trials.trial_officials (nct_id, name, affiliation, role, ingestion_date) VALUES ($1,$2,$3,$4,$5)",
-            [("NCT-A", "Dr Jane", "Big Hospital", "PRINCIPAL_INVESTIGATOR", INGEST_DATE)],
-        )
-
-    repo = TrialSearchRepository(
-        pg=PostgresClient(pool), settings=Settings(vector_search_oversample_factor=3)
-    )
-    return pool, repo
+    return engine, session_factory
 
 
 @pytest.fixture(scope="module")
@@ -180,28 +150,36 @@ def repo():
     )
     container.start()
     loop = asyncio.new_event_loop()
-    pool = None
+    engine = None
     try:
         host = container.get_container_host_ip()
         port = container.get_exposed_port(5432)
         url = f"postgresql://test:test@{host}:{port}/test"
-        pool, repository = loop.run_until_complete(_setup(url))
-        yield loop, repository
+        engine, session_factory = loop.run_until_complete(_setup(url))
+        yield loop, session_factory
     finally:
-        if pool is not None:
-            loop.run_until_complete(pool.close())
+        if engine is not None:
+            loop.run_until_complete(engine.dispose())
         loop.close()
         container.stop()
 
 
-def _run(repo_fixture, coro):
-    loop, _ = repo_fixture
-    return loop.run_until_complete(coro)
+def _run_repo(fixture, method: str, *args, **kwargs):
+    """Open a fresh session, build a repository, and run one of its coroutines."""
+    loop, session_factory = fixture
+
+    async def _go():
+        async with session_factory() as session:
+            repository = TrialSearchRepository(
+                session=session, settings=Settings(vector_search_oversample_factor=3)
+            )
+            return await getattr(repository, method)(*args, **kwargs)
+
+    return loop.run_until_complete(_go())
 
 
 def test_returns_nearest_trials_ordered_by_distance(repo):
-    _, repository = repo
-    rows = _run(repo, repository.vector_search(embedding=QUERY, fields=[Field.SUMMARY], top_k=10))
+    rows = _run_repo(repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10)
 
     assert [r.nct_id for r in rows] == ["NCT-A", "NCT-B", "NCT-C"]
     distances = [r.best_distance for r in rows]
@@ -210,27 +188,22 @@ def test_returns_nearest_trials_ordered_by_distance(repo):
 
 
 def test_phase_filter_restricts_to_matching_trials(repo):
-    _, repository = repo
-    rows = _run(
-        repo,
-        repository.vector_search(
-            embedding=QUERY, fields=[Field.SUMMARY], top_k=10, phase_filter=("PHASE3",)
-        ),
+    rows = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        phase_filter=("PHASE3",),
     )
     assert [r.nct_id for r in rows] == ["NCT-B"]
 
 
 def test_field_filter_restricts_to_field_type(repo):
-    _, repository = repo
-    rows = _run(repo, repository.vector_search(embedding=QUERY, fields=[Field.TITLE], top_k=10))
+    rows = _run_repo(repo, "vector_search", embedding=QUERY, fields=[Field.TITLE], top_k=10)
 
     assert [r.nct_id for r in rows] == ["NCT-A"]
     assert rows[0].best_chunk.field_type == "title"
 
 
 def test_aggregates_locations(repo):
-    _, repository = repo
-    rows = _run(repo, repository.vector_search(embedding=QUERY, fields=[Field.SUMMARY], top_k=10))
+    rows = _run_repo(repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10)
 
     a = next(r for r in rows if r.nct_id == "NCT-A")
     assert a.total_sites == 2
@@ -239,30 +212,27 @@ def test_aggregates_locations(repo):
 
 
 def test_get_trial_unknown_id_returns_none(repo):
-    _, repository = repo
-    assert _run(repo, repository.get_trial("NCT-DOES-NOT-EXIST")) is None
+    assert _run_repo(repo, "get_trial", "NCT-DOES-NOT-EXIST") is None
 
 
 def test_get_trial_assembles_full_record(repo):
-    _, repository = repo
-    detail = _run(repo, repository.get_trial("NCT-A"))
+    detail = _run_repo(repo, "get_trial", "NCT-A")
 
     assert detail is not None
     assert detail.nct_id == "NCT-A"
     assert detail.official_title == "Official Trial A"
     assert detail.eligibility_criteria == "Inclusion: adults"
 
-    # JSONB columns decode + validate (incl. the "class" -> sponsor_class alias and the
-    # quoted "references" reserved word).
+    # JSONB columns decode + validate (incl. the "class" -> sponsor_class alias).
     assert detail.collaborators[0].sponsor_class == "INDUSTRY"
     assert detail.central_contacts[0].email == "a@b.co"
     assert detail.references[0].pmid == "123"
 
-    # Child collections aggregate via the JSONB subqueries.
+    # Child collections load via selectinload.
     assert {loc.facility for loc in detail.locations} == {"Site 1", "Site 2"}
     assert detail.interventions[0].name == "Compound X"
     assert detail.arm_groups[0].label == "Arm 1"
     assert detail.officials[0].name == "Dr Jane"
 
-    # Outcomes are ordered PRIMARY before SECONDARY by the query.
+    # Outcomes are ordered PRIMARY before SECONDARY in the repository.
     assert [o.outcome_type for o in detail.outcomes] == ["PRIMARY", "SECONDARY"]

@@ -2,15 +2,32 @@ from datetime import date, datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, BigInteger, Boolean, Date, DateTime, Float, Integer, MetaData, String, Text
+from sqlalchemy import (
+    ARRAY,
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # All trial-domain tables live in the dedicated `trials` schema, separate from the
 # user/auth domain (owned by api-core's Prisma schema `app`). See the two-ORM domain
 # split in the ctiq-product-engineering skill. Setting the schema on the shared
 # MetaData makes every model below resolve to `trials.<table>` automatically.
 TRIALS_SCHEMA = "trials"
+
+# Child tables reference the parent by nct_id. Centralize the FK target so all children
+# stay consistent (schema-qualified because the MetaData carries a schema).
+_TRIAL_FK = f"{TRIALS_SCHEMA}.clinical_trials.nct_id"
 
 
 class Base(DeclarativeBase):
@@ -87,12 +104,39 @@ class ClinicalTrial(Base):
     central_contacts: Mapped[Optional[list]] = mapped_column(JSONB)  # [{name, role, phone, email}]
     references: Mapped[Optional[list]] = mapped_column(JSONB)        # [{citation, type, pmid}]
 
+    # ── Relationships ───────────────────────────────────────────────────────────
+    # Child collections, keyed on nct_id. get_trial loads these with selectinload.
+    # delete-orphan + passive_deletes pairs with the children's ON DELETE CASCADE FK.
+    locations: Mapped[list["TrialLocation"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+    mesh_terms: Mapped[list["TrialMeshTerm"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+    arm_groups: Mapped[list["TrialArmGroup"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+    interventions: Mapped[list["TrialIntervention"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+    outcomes: Mapped[list["TrialOutcome"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+    officials: Mapped[list["TrialOfficial"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+    embeddings: Mapped[list["TrialEmbedding"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
+
 
 class TrialLocation(Base):
     __tablename__ = "trial_locations"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    nct_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
     facility: Mapped[Optional[str]] = mapped_column(String)
     city: Mapped[Optional[str]] = mapped_column(String)
     state: Mapped[Optional[str]] = mapped_column(String)
@@ -105,12 +149,16 @@ class TrialLocation(Base):
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="locations")
+
 
 class TrialMeshTerm(Base):
     __tablename__ = "trial_mesh_terms"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    nct_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
     mesh_id: Mapped[Optional[str]] = mapped_column(String)
     mesh_term: Mapped[Optional[str]] = mapped_column(String)
     browse_type: Mapped[Optional[str]] = mapped_column(String)
@@ -118,12 +166,16 @@ class TrialMeshTerm(Base):
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="mesh_terms")
+
 
 class TrialArmGroup(Base):
     __tablename__ = "trial_arm_groups"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    nct_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
     label: Mapped[Optional[str]] = mapped_column(String)
     type: Mapped[Optional[str]] = mapped_column(String)
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -131,12 +183,16 @@ class TrialArmGroup(Base):
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="arm_groups")
+
 
 class TrialIntervention(Base):
     __tablename__ = "trial_interventions"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    nct_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
     type: Mapped[Optional[str]] = mapped_column(String)
     name: Mapped[Optional[str]] = mapped_column(String)
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -145,12 +201,16 @@ class TrialIntervention(Base):
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="interventions")
+
 
 class TrialOutcome(Base):
     __tablename__ = "trial_outcomes"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    nct_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
     outcome_type: Mapped[Optional[str]] = mapped_column(String)
     measure: Mapped[Optional[str]] = mapped_column(Text)
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -158,23 +218,42 @@ class TrialOutcome(Base):
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="outcomes")
+
 
 class TrialOfficial(Base):
     __tablename__ = "trial_officials"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    nct_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[Optional[str]] = mapped_column(String)
     affiliation: Mapped[Optional[str]] = mapped_column(String)
     role: Mapped[Optional[str]] = mapped_column(String)
     ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="officials")
+
 
 class TrialEmbedding(Base):
     __tablename__ = "trial_embeddings"
 
-    nct_id: Mapped[str] = mapped_column(String, primary_key=True)
+    # HNSW index for fast cosine-distance (<=>) nearest-neighbour search — the embedding
+    # column is queried on every trial search. vector_cosine_ops matches the `<=>` operator.
+    __table_args__ = (
+        Index(
+            "ix_trial_embeddings_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), primary_key=True
+    )
     field_type: Mapped[str] = mapped_column(String, primary_key=True)
     chunk_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -182,3 +261,5 @@ class TrialEmbedding(Base):
     embedding: Mapped[Optional[list]] = mapped_column(Vector(768))
     model_version: Mapped[str] = mapped_column(String, nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    trial: Mapped["ClinicalTrial"] = relationship(back_populates="embeddings")

@@ -7,9 +7,12 @@ ARG POETRY_VERSION=2.1.3
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1 – deps: install PyPI packages from the lockfile
 #
-# ctiq-db is a local path dep that poetry export omits automatically.
-# This layer only busts when pyproject.toml or poetry.lock changes —
-# not when ctiq-db source or application source changes.
+# ctiq-db is a local path dep that poetry export omits automatically, so its *source*
+# is shipped separately (via PYTHONPATH, see runtime stage). Its runtime deps, however,
+# must be installed here: the trial_search repository uses the SQLAlchemy async ORM, so
+# sqlalchemy[asyncio] (+ pgvector, asyncpg) are declared in inference's MAIN deps and
+# land in `--only main`. This layer only busts when pyproject.toml or poetry.lock changes
+# — not when ctiq-db source or application source changes.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS deps
 
@@ -75,7 +78,8 @@ COPY --from=model /app/ai-service/inference-service/.hf-cache \
                   /app/ai-service/inference-service/.hf-cache
 
 # ctiq-db source: placed here (downstream of the model stage) so changes to
-# shared models don't invalidate the model-bake cache.
+# shared models don't invalidate the model-bake cache. Importable via PYTHONPATH
+# (set above); its runtime deps (sqlalchemy, pgvector) come from the deps stage.
 COPY py-packages/ctiq-db/src /app/py-packages/ctiq-db/src
 
 # Application source

@@ -6,14 +6,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MatchingChunk(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     field_type: str
     chunk_text: str
     distance: float
 
 class Facility(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     facility: Optional[str] = None
     city: Optional[str] = None
@@ -50,7 +50,7 @@ class TrialSearchResultRow(BaseModel):
     model_config = {"from_attributes": True}   # tolerate BQ Row attribute access
 
 class EligibilitySummary(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     min_age_years: Optional[float] = None
     max_age_years: Optional[float] = None
@@ -60,7 +60,7 @@ class EligibilitySummary(BaseModel):
 
 
 class LocationSummary(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     total_sites: int = 0
     recruiting_sites: int = 0
@@ -70,7 +70,7 @@ class LocationSummary(BaseModel):
 
 
 class TrialCard(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     nct_id: str
     brief_title: str
@@ -120,7 +120,7 @@ class Reference(BaseModel):
 
 
 class TrialLocationDetail(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     facility: Optional[str] = None
     city: Optional[str] = None
@@ -131,7 +131,7 @@ class TrialLocationDetail(BaseModel):
 
 
 class TrialInterventionDetail(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     type: Optional[str] = None
     name: Optional[str] = None
@@ -139,7 +139,7 @@ class TrialInterventionDetail(BaseModel):
 
 
 class TrialOutcomeDetail(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     outcome_type: Optional[str] = None
     measure: Optional[str] = None
@@ -148,7 +148,7 @@ class TrialOutcomeDetail(BaseModel):
 
 
 class TrialArmGroupDetail(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     label: Optional[str] = None
     type: Optional[str] = None
@@ -156,7 +156,7 @@ class TrialArmGroupDetail(BaseModel):
 
 
 class TrialOfficialDetail(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, from_attributes=True)
 
     name: Optional[str] = None
     affiliation: Optional[str] = None

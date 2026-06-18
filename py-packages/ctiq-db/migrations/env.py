@@ -1,5 +1,6 @@
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -12,6 +13,31 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+
+def _load_local_dotenv() -> None:
+    """Load this package's .env so a DATABASE_URL kept there is picked up.
+
+    Alembic only reads real (exported) environment variables; without this it silently
+    falls back to the alembic.ini placeholder when DATABASE_URL lives only in .env.
+    Uses setdefault, so an exported env var or `make migrate-* DATABASE_URL=...` always
+    wins — .env is a fallback, never an override.
+    """
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for raw in env_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_local_dotenv()
 
 
 def include_name(name, type_, parent_names):

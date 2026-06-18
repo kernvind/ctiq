@@ -14,6 +14,11 @@ dependencies = [
     "pydantic-settings (>=2.14.1,<3.0.0)",
     "asyncpg (>=0.30.0,<1.0.0)",
     "pgvector (>=0.3.0,<1.0.0)",
+    # The trial_search repository uses the SQLAlchemy async ORM over the ctiq-db models.
+    # ctiq-db itself is provided via PYTHONPATH (source copy) in the image, but its runtime
+    # deps must be installed here so they land in `poetry export --only main`. The [asyncio]
+    # extra pulls greenlet (required by SQLAlchemy's async engine).
+    "sqlalchemy[asyncio] (>=2.0.0,<3.0.0)",
     "sentence-transformers (>=5.5.1,<6.0.0)",
     "einops (>=0.8.2,<0.9.0)"
 ]

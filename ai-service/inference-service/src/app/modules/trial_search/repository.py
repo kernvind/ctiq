@@ -1,19 +1,40 @@
 import logging
 from typing import Optional, Sequence
 
-from src.app.infra.postgres.client import PostgresClient
-from src.app.modules.trial_search.planning.schemas import Field
-from src.app.modules.trial_search.schemas import TrialDetail, TrialSearchResultRow
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from ctiq_db import ClinicalTrial, TrialEmbedding, TrialLocation
+
 from src.app.core.config import Settings
+from src.app.modules.trial_search.planning.schemas import Field
+from src.app.modules.trial_search.schemas import (
+    Facility,
+    MatchingChunk,
+    TrialDetail,
+    TrialSearchResultRow,
+)
 
 logger = logging.getLogger(__name__)
 
+# Sort key for outcome types on the detail page (primary endpoints first).
+_OUTCOME_ORDER: dict[str, int] = {"PRIMARY": 0, "SECONDARY": 1}
+
+# How many sample facilities to surface on a search result card.
+_SAMPLE_FACILITIES = 5
+
+
+def _facility_sort_key(loc: TrialLocation) -> tuple:
+    # Recruiting sites first, then alphabetical — same intent as the old SQL.
+    return (0 if loc.status == "RECRUITING" else 1, loc.country or "", loc.facility or "")
+
 
 class TrialSearchRepository:
-    """Read-side repository for the trial search use case."""
+    """Read-side repository for the trial search use case (SQLAlchemy async ORM)."""
 
-    def __init__(self, pg: PostgresClient, settings: Settings):
-        self.pg = pg
+    def __init__(self, session: AsyncSession, settings: Settings):
+        self.session = session
         self.settings = settings
 
     async def vector_search(
@@ -30,184 +51,144 @@ class TrialSearchRepository:
             raise ValueError("vector_search requires at least one field type")
 
         oversample_k = self.settings.vector_search_oversample_factor * top_k
+        field_values = [str(f) for f in fields]
 
-        # Build param list dynamically so optional filters get correct $n positions.
-        params: list = []
-
-        def p(value) -> str:
-            params.append(value)
-            return f"${len(params)}"
-
-        embedding_ref   = p(embedding)
-        oversample_ref  = p(oversample_k)
-        field_types_ref = p([str(f) for f in fields])
-        limit_ref       = p(top_k)
-
-        pre_filters = ["1=1"]
-        if statuses:
-            pre_filters.append(f"overall_status = ANY({p(list(statuses))})")
-        if phase_filter:
-            pre_filters.append(f"phases && {p(list(phase_filter))}")
-
-        pre_filter_sql = " AND ".join(pre_filters)
-
-        query = f"""
-        WITH candidates AS (
-            SELECT nct_id
-            FROM clinical_trials
-            WHERE {pre_filter_sql}
-        ),
-        matched AS (
-            SELECT
-                e.nct_id,
-                e.field_type,
-                e.chunk_text,
-                e.embedding <=> {embedding_ref}  AS distance
-            FROM trial_embeddings e
-            WHERE e.field_type = ANY({field_types_ref})
-              AND e.nct_id IN (SELECT nct_id FROM candidates)
-            ORDER BY distance
-            LIMIT {oversample_ref}
-        ),
-        per_trial_matches AS (
-            SELECT
-                nct_id,
-                MIN(distance) AS best_distance,
-                jsonb_agg(
-                    jsonb_build_object(
-                        'field_type', field_type,
-                        'chunk_text', chunk_text,
-                        'distance',   distance
-                    )
-                    ORDER BY distance
-                ) AS all_chunks
-            FROM matched
-            GROUP BY nct_id
-        ),
-        location_aggs AS (
-            SELECT
-                nct_id,
-                COUNT(*)                                        AS total_sites,
-                COUNT(*) FILTER (WHERE status = 'RECRUITING')  AS recruiting_sites,
-                jsonb_agg(
-                    jsonb_build_object(
-                        'facility', facility,
-                        'city',     city,
-                        'state',    state,
-                        'country',  country,
-                        'status',   status
-                    )
-                    ORDER BY CASE WHEN status = 'RECRUITING' THEN 0 ELSE 1 END, facility
-                ) FILTER (WHERE rn <= 5) AS sample_facilities
-            FROM (
-                SELECT *,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY nct_id
-                        ORDER BY CASE WHEN status = 'RECRUITING' THEN 0 ELSE 1 END, facility
-                    ) AS rn
-                FROM trial_locations
-                WHERE nct_id IN (SELECT nct_id FROM per_trial_matches)
-            ) ranked
-            GROUP BY nct_id
+        # ── Q1: the only vector query — KNN over embeddings among pre-filtered trials.
+        distance = TrialEmbedding.embedding.cosine_distance(embedding).label("distance")
+        stmt = (
+            select(
+                TrialEmbedding.nct_id,
+                TrialEmbedding.field_type,
+                TrialEmbedding.chunk_text,
+                distance,
+            )
+            .join(ClinicalTrial, ClinicalTrial.nct_id == TrialEmbedding.nct_id)
+            .where(TrialEmbedding.field_type.in_(field_values))
         )
-        SELECT
-            m.nct_id,
-            t.brief_title,
-            t.brief_summary,
-            t.overall_status,
-            t.phases,
-            t.conditions,
-            t.lead_sponsor_name,
-            t.lead_sponsor_class,
-            t.min_age_years,
-            t.max_age_years,
-            t.sex,
-            t.healthy_volunteers,
-            m.best_distance,
-            m.all_chunks,
-            COALESCE(loc.total_sites, 0)              AS total_sites,
-            COALESCE(loc.recruiting_sites, 0)         AS recruiting_sites,
-            COALESCE(loc.sample_facilities, '[]'::jsonb) AS sample_facilities
-        FROM per_trial_matches m
-        JOIN clinical_trials t USING (nct_id)
-        LEFT JOIN location_aggs loc USING (nct_id)
-        ORDER BY m.best_distance
-        LIMIT {limit_ref}
-        """
+        if statuses:
+            stmt = stmt.where(ClinicalTrial.overall_status.in_(list(statuses)))
+        if phase_filter:
+            # array overlap (&&): the trial's phases intersect the requested phases.
+            stmt = stmt.where(ClinicalTrial.phases.op("&&")(list(phase_filter)))
+        stmt = stmt.order_by(distance).limit(oversample_k)
 
-        rows = await self.pg.fetch(query, *params)
-        logger.info("vector_search returned %d rows (top_k=%d)", len(rows), top_k)
+        matched = (await self.session.execute(stmt)).all()
 
-        results = []
-        for row in rows:
-            d = dict(row)
-            all_chunks = d.pop("all_chunks") or []
-            d["best_chunk"] = all_chunks[0]
-            d["top_chunks"] = all_chunks[:3]
-            results.append(TrialSearchResultRow.model_validate(d))
+        # Group chunks per trial (rows are already distance-sorted, so the first chunk
+        # for each trial is its best match). Replaces the per_trial_matches jsonb_agg CTE.
+        chunks_by_trial: dict[str, list[MatchingChunk]] = {}
+        for row in matched:
+            chunks_by_trial.setdefault(row.nct_id, []).append(
+                MatchingChunk(
+                    field_type=row.field_type,
+                    chunk_text=row.chunk_text,
+                    distance=row.distance,
+                )
+            )
 
+        # Best trials first, by best (smallest) distance; then take top_k.
+        ranked_ids = sorted(
+            chunks_by_trial, key=lambda nid: chunks_by_trial[nid][0].distance
+        )[:top_k]
+        if not ranked_ids:
+            logger.info("vector_search: no matches (top_k=%d)", top_k)
+            return []
+
+        # ── Q2 + Q3: metadata + locations for just the winners (indexed by nct_id).
+        trials = await self._fetch_trials(ranked_ids)
+        locations = await self._fetch_locations(ranked_ids)
+
+        results = [
+            self._to_result_row(trials[nid], chunks_by_trial[nid], locations.get(nid, []))
+            for nid in ranked_ids
+            if nid in trials
+        ]
+        logger.info("vector_search returned %d rows (top_k=%d)", len(results), top_k)
         return results
 
+    async def _fetch_trials(self, nct_ids: list[str]) -> dict[str, ClinicalTrial]:
+        rows = await self.session.scalars(
+            select(ClinicalTrial).where(ClinicalTrial.nct_id.in_(nct_ids))
+        )
+        return {t.nct_id: t for t in rows}
+
+    async def _fetch_locations(self, nct_ids: list[str]) -> dict[str, list[TrialLocation]]:
+        rows = await self.session.scalars(
+            select(TrialLocation).where(TrialLocation.nct_id.in_(nct_ids))
+        )
+        grouped: dict[str, list[TrialLocation]] = {}
+        for loc in rows:
+            grouped.setdefault(loc.nct_id, []).append(loc)
+        return grouped
+
+    def _to_result_row(
+        self,
+        trial: ClinicalTrial,
+        chunks: list[MatchingChunk],
+        locations: list[TrialLocation],
+    ) -> TrialSearchResultRow:
+        sample = sorted(locations, key=_facility_sort_key)[:_SAMPLE_FACILITIES]
+        return TrialSearchResultRow(
+            nct_id=trial.nct_id,
+            brief_title=trial.brief_title,
+            brief_summary=trial.brief_summary,
+            overall_status=trial.overall_status,
+            phases=trial.phases or [],
+            conditions=trial.conditions or [],
+            lead_sponsor_name=trial.lead_sponsor_name,
+            lead_sponsor_class=trial.lead_sponsor_class,
+            min_age_years=trial.min_age_years,
+            max_age_years=trial.max_age_years,
+            sex=trial.sex,
+            healthy_volunteers=trial.healthy_volunteers,
+            best_distance=chunks[0].distance,
+            best_chunk=chunks[0],
+            top_chunks=chunks[:3],
+            total_sites=len(locations),
+            recruiting_sites=sum(1 for loc in locations if loc.status == "RECRUITING"),
+            sample_facilities=[
+                Facility(
+                    facility=loc.facility,
+                    city=loc.city,
+                    state=loc.state,
+                    country=loc.country,
+                    status=loc.status,
+                )
+                for loc in sample
+            ],
+        )
+
     async def get_trial(self, nct_id: str) -> Optional[TrialDetail]:
-        """Fetch one trial's full record (+ child tables) by NCT id.
+        """Fetch one trial's full record (+ child tables) by NCT id via the ORM.
 
-        Search-agnostic: no embeddings or match context, so the same query backs the
-        detail page for both authed and anonymous (public) callers. Child collections
-        are aggregated as JSONB in a single round trip.
+        Search-agnostic (no embeddings / match context), so the same path backs the detail
+        page for authed and anonymous callers. Child collections are eager-loaded with
+        selectinload (one extra query per relationship) — no lazy loading, which AsyncSession
+        forbids.
         """
-        query = """
-        SELECT
-            t.nct_id,
-            t.brief_title, t.official_title, t.acronym, t.organization,
-            t.overall_status, t.start_date, t.completion_date,
-            t.primary_completion_date, t.last_update_post_date,
-            t.lead_sponsor_name, t.lead_sponsor_class, t.collaborators,
-            t.study_type, t.phases, t.allocation, t.intervention_model,
-            t.primary_purpose, t.masking, t.enrollment_count, t.enrollment_type,
-            t.conditions, t.keywords,
-            t.eligibility_criteria, t.min_age_years, t.max_age_years, t.sex,
-            t.std_ages, t.healthy_volunteers,
-            t.brief_summary, t.detailed_description,
-            t.central_contacts, t."references",
-            COALESCE((
-                SELECT jsonb_agg(jsonb_build_object(
-                    'facility', facility, 'city', city, 'state', state,
-                    'country', country, 'zip', zip, 'status', status
-                ) ORDER BY CASE WHEN status = 'RECRUITING' THEN 0 ELSE 1 END, country, facility)
-                FROM trial_locations WHERE nct_id = t.nct_id
-            ), '[]'::jsonb) AS locations,
-            COALESCE((
-                SELECT jsonb_agg(jsonb_build_object(
-                    'type', type, 'name', name, 'description', description
-                ) ORDER BY id)
-                FROM trial_interventions WHERE nct_id = t.nct_id
-            ), '[]'::jsonb) AS interventions,
-            COALESCE((
-                SELECT jsonb_agg(jsonb_build_object(
-                    'outcome_type', outcome_type, 'measure', measure,
-                    'description', description, 'time_frame', time_frame
-                ) ORDER BY CASE outcome_type WHEN 'PRIMARY' THEN 0 WHEN 'SECONDARY' THEN 1 ELSE 2 END, id)
-                FROM trial_outcomes WHERE nct_id = t.nct_id
-            ), '[]'::jsonb) AS outcomes,
-            COALESCE((
-                SELECT jsonb_agg(jsonb_build_object(
-                    'label', label, 'type', type, 'description', description
-                ) ORDER BY id)
-                FROM trial_arm_groups WHERE nct_id = t.nct_id
-            ), '[]'::jsonb) AS arm_groups,
-            COALESCE((
-                SELECT jsonb_agg(jsonb_build_object(
-                    'name', name, 'affiliation', affiliation, 'role', role
-                ) ORDER BY id)
-                FROM trial_officials WHERE nct_id = t.nct_id
-            ), '[]'::jsonb) AS officials
-        FROM clinical_trials t
-        WHERE t.nct_id = $1
-        """
-
-        rows = await self.pg.fetch(query, nct_id)
-        if not rows:
+        stmt = (
+            select(ClinicalTrial)
+            .where(ClinicalTrial.nct_id == nct_id)
+            .options(
+                selectinload(ClinicalTrial.locations),
+                selectinload(ClinicalTrial.interventions),
+                selectinload(ClinicalTrial.outcomes),
+                selectinload(ClinicalTrial.arm_groups),
+                selectinload(ClinicalTrial.officials),
+            )
+        )
+        trial = (await self.session.execute(stmt)).scalar_one_or_none()
+        if trial is None:
             logger.info("get_trial: no trial found for nct_id=%s", nct_id)
             return None
 
-        return TrialDetail.model_validate(dict(rows[0]))
+        # Relationship load order isn't guaranteed — sort in place before mapping so the
+        # detail view is deterministic (recruiting sites first; primary outcomes first).
+        trial.locations.sort(key=_facility_sort_key)
+        # outcome_type can be None; normalize to empty string so dict.get() accepts it
+        trial.outcomes.sort(key=lambda o: (_OUTCOME_ORDER.get(o.outcome_type or "", 2), o.id))
+        trial.interventions.sort(key=lambda i: i.id)
+        trial.arm_groups.sort(key=lambda a: a.id)
+        trial.officials.sort(key=lambda o: o.id)
+
+        return TrialDetail.model_validate(trial)
