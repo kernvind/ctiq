@@ -1,8 +1,21 @@
 import { z } from "zod";
+const PASSWORD_ERROR_MESSAGE =
+  "Password must be at least 8 characters long and at most 50 characters long";
+const EMAIL_ERROR_MESSAGE = "Must be a valid email address";
+
+const PASSWORD_VALIDATION_ZOD_SIGNUP = z
+  .string()
+  .min(8, PASSWORD_ERROR_MESSAGE)
+  .max(50, PASSWORD_ERROR_MESSAGE);
+
+const PASSWORD_VALIDATION_ZOD_SIGNIN = z
+  .string()
+  .min(8, "Invalid password")
+  .max(50, "Invalid password");
 
 export const ZodLoginSchema = z.object({
   username: z.string().min(3).max(50),
-  password: z.string().min(8).max(50),
+  password: PASSWORD_VALIDATION_ZOD_SIGNIN,
 });
 
 // Roles a user may self-select at signup. Mirrors the SignupRole enum in
@@ -12,10 +25,10 @@ export const ZodLoginSchema = z.object({
 export const SIGNUP_ROLES = ["PATIENT", "CLINICIAN", "ANALYST"] as const;
 
 export const ZodSignupSchema = z.object({
-  email: z.email(),
+  email: z.email(EMAIL_ERROR_MESSAGE),
   username: z.string().min(3).max(50),
   name: z.string().min(1).max(100).optional(),
-  password: z.string().min(8).max(50),
+  password: PASSWORD_VALIDATION_ZOD_SIGNUP,
   role: z.enum(SIGNUP_ROLES).default("PATIENT"),
 });
 // extended schema — used by Next.js forms only
