@@ -94,7 +94,9 @@ class TrialCard(BaseModel):
 
 
 class ContactInfo(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    # coerce_numbers_to_str: these come from JSONB, which preserves JSON-native types —
+    # e.g. `pmid` / `phone` can arrive as ints. They're display strings, so coerce.
+    model_config = ConfigDict(frozen=True, extra="ignore", coerce_numbers_to_str=True)
 
     name: Optional[str] = None
     role: Optional[str] = None
@@ -103,7 +105,9 @@ class ContactInfo(BaseModel):
 
 
 class Collaborator(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    # coerce_numbers_to_str: these come from JSONB, which preserves JSON-native types —
+    # e.g. `pmid` / `phone` can arrive as ints. They're display strings, so coerce.
+    model_config = ConfigDict(frozen=True, extra="ignore", coerce_numbers_to_str=True)
 
     name: Optional[str] = None
     # The JSONB key is "class" (a Python keyword); read it via alias, emit as
@@ -112,7 +116,9 @@ class Collaborator(BaseModel):
 
 
 class Reference(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    # coerce_numbers_to_str: these come from JSONB, which preserves JSON-native types —
+    # e.g. `pmid` / `phone` can arrive as ints. They're display strings, so coerce.
+    model_config = ConfigDict(frozen=True, extra="ignore", coerce_numbers_to_str=True)
 
     citation: Optional[str] = None
     type: Optional[str] = None
