@@ -85,8 +85,10 @@ async def _setup(url: str):
                     official_title="Official Trial A", detailed_description="Long description",
                     eligibility_criteria="Inclusion: adults", study_type="INTERVENTIONAL",
                     collaborators=[{"name": "Acme", "class": "INDUSTRY"}],
-                    central_contacts=[{"name": "Coord", "role": "CONTACT", "phone": "555", "email": "a@b.co"}],
-                    references=[{"citation": "Smith 2020", "type": "BACKGROUND", "pmid": "123"}],
+                    # phone/pmid intentionally stored as JSON ints — real ETL data does this,
+                    # and the schema must coerce them to str (see coerce_numbers_to_str).
+                    central_contacts=[{"name": "Coord", "role": "CONTACT", "phone": 555, "email": "a@b.co"}],
+                    references=[{"citation": "Smith 2020", "type": "BACKGROUND", "pmid": 123}],
                 ),
                 ClinicalTrial(
                     nct_id="NCT-B", brief_title="Trial B", overall_status="RECRUITING",
@@ -226,6 +228,8 @@ def test_get_trial_assembles_full_record(repo):
     # JSONB columns decode + validate (incl. the "class" -> sponsor_class alias).
     assert detail.collaborators[0].sponsor_class == "INDUSTRY"
     assert detail.central_contacts[0].email == "a@b.co"
+    # JSON ints coerced to str (real ETL stores these numerically).
+    assert detail.central_contacts[0].phone == "555"
     assert detail.references[0].pmid == "123"
 
     # Child collections load via selectinload.
