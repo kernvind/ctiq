@@ -14,5 +14,6 @@ export async function POST() {
     }
   }
   await clearAuthCookies();
-  redirect("/login");
+  // Land on the public home (anonymous users can still search), not the login page.
+  redirect("/");
 }

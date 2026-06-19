@@ -19,7 +19,7 @@ import {
 import { Input } from "@repo/ui/components/input";
 import { ShieldCheck, User, Lock } from "lucide-react";
 import Link from "next/link";
-import { login } from "@/app/login/actions";
+import { login } from "@/lib/actions/login/actions";
 
 export function LoginForm({
   className,
@@ -34,7 +34,11 @@ export function LoginForm({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-2">
             <ShieldCheck className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-xl">CTIQ Health</CardTitle>
+          <CardTitle className="text-xl">
+            <Link href="/" className="text-sm font-semibold">
+              CTIQ Health
+            </Link>
+          </CardTitle>
           <CardDescription>Sign in to your account to continue</CardDescription>
         </CardHeader>
 
@@ -84,7 +88,11 @@ export function LoginForm({
                 </div>
               </Field>
 
-              <Button type="submit" className="w-full mt-2" disabled={isPending}>
+              <Button
+                type="submit"
+                className="w-full mt-2"
+                disabled={isPending}
+              >
                 {isPending ? "Signing in..." : "Sign in"}
               </Button>
             </FieldGroup>

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { getAuthedSdk } from "@repo/generated-schemas-web";
 import { ACCESS_TOKEN_COOKIE } from "./auth-cookies";
-import { refreshSession } from "@/app/auth-actions";
+import { refreshSession } from "@/features/auth/auth-actions";
 
 type AuthedSdk = ReturnType<typeof getAuthedSdk>;
 

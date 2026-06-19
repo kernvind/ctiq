@@ -1,17 +1,26 @@
+import { TrialResultsList } from "@/components/trial-results-list";
 import { TrialSearchForm } from "@/components/trial-search-form";
 
-export default function TrialsPage() {
+/** Empty state shown in the detail pane until a trial is selected. */
+import { searchTrialsAction } from "@/lib/actions/trial/search/actions";
+
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const query = (await searchParams).q ?? "";
+
+  const results = query.length >= 10 ? await searchTrialsAction(query) : null;
   return (
-    <div className="p-6">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold">Trial Search</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Semantic search across clinical trials
-          </p>
-        </div>
-        <TrialSearchForm />
-      </div>
+    <div className="flex flex-col gap-4 rounded-lg border border-dashed p-6">
+      <TrialSearchForm basePath="/dashboard/trials" />
+
+      <TrialResultsList
+        basePath="/dashboard/trials"
+        state={results}
+        query={query}
+      />
     </div>
   );
 }

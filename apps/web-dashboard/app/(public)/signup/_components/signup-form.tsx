@@ -10,15 +10,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-} from "@repo/ui/components/field";
+import { Field, FieldGroup, FieldLabel } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { ShieldCheck, User, Lock, Mail, UserCircle, Stethoscope } from "lucide-react";
+import {
+  ShieldCheck,
+  User,
+  Lock,
+  Mail,
+  UserCircle,
+  Stethoscope,
+} from "lucide-react";
 import Link from "next/link";
-import { signup } from "@/app/signup/actions";
+import { signup } from "@/lib/actions/signup/actions";
 
 export function SignupForm({
   className,
@@ -33,7 +36,11 @@ export function SignupForm({
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-2">
             <ShieldCheck className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-xl">CTIQ Health</CardTitle>
+          <CardTitle className="text-xl">
+            <Link href="/" className="text-sm font-semibold">
+              CTIQ Health
+            </Link>
+          </CardTitle>
           <CardDescription>Create your account to get started</CardDescription>
         </CardHeader>
 
@@ -122,7 +129,9 @@ export function SignupForm({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="confirmPassword">Confirm Password</FieldLabel>
+                <FieldLabel htmlFor="confirmPassword">
+                  Confirm Password
+                </FieldLabel>
                 <div className="relative">
                   <Lock className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                   <Input
@@ -135,14 +144,18 @@ export function SignupForm({
                 </div>
               </Field>
 
-              <Button type="submit" className="w-full mt-2" disabled={isPending}>
+              <Button
+                type="submit"
+                className="w-full mt-2"
+                disabled={isPending}
+              >
                 {isPending ? "Creating account..." : "Create account"}
               </Button>
             </FieldGroup>
           </form>
 
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Already have an account?{" "}
+            Already have an account?
             <Link
               href="/login"
               className="font-medium text-foreground underline-offset-4 hover:underline"
