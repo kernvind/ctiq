@@ -1,0 +1,82 @@
+# Production deployment — single Hetzner VM, no Kubernetes.
+# Run from the repo root on the VM:
+#   docker compose -f docker-compose.hetzner.yml --env-file .env.production up -d --build
+#
+# This is a NEW root-level sibling to the three per-service docker-compose.yml files,
+# each of which is explicitly "local testing only — not used in production". This file
+# IS the real deployment for the Hetzner VM tier. Deliberate differences from those dev files:
+#   - DATABASE_URL/PG_DATABASE_URL point at the real Supabase instance, not a local
+#     `postgres` container — no external postgres_db network needed.
+#   - api-core and inference-service publish NO host ports — reachable only on the internal
+#     `ctiq` network. caddy is the only service with published ports (80/443).
+#   - No --reload / bind-mounted source for inference-service — runs the built image as-is.
+#   - No healthcheck: blocks — all three Dockerfiles already define a HEALTHCHECK instruction.
+
+services:
+  api-core:
+    build:
+      context: .
+      dockerfile: apps/api-core/Dockerfile
+    image: ctiq-api-core:prod
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-8h}
+      - SEARCH_API_URL=http://inference-service:8000
+      - SEARCH_API_TOKEN=${SEARCH_API_TOKEN}
+      # Required at runtime by trial-search.service.ts (configService.getOrThrow).
+      # Without these, api-core boots fine but throws the first time anyone searches a trial.
+      - FAST_API_VERSION_V1=${FAST_API_VERSION_V1:-/api/v1}
+      - FAST_API_SEARCH_TRIAL_PATH=${FAST_API_SEARCH_TRIAL_PATH:-/search/trials}
+    networks: [ctiq]
+    restart: unless-stopped
+
+  inference-service:
+    build:
+      context: .
+      dockerfile: ai-service/inference-service/Dockerfile
+      # Optional — the Dockerfile's secret mount is `required=false`. Omit the
+      # `secrets:` key (and the top-level secrets: block) if you don't need an
+      # authenticated Hugging Face download.
+      secrets: [hf_token]
+    image: ctiq-inference:prod
+    environment:
+      - PG_DATABASE_URL=${PG_DATABASE_URL}
+    networks: [ctiq]
+    restart: unless-stopped
+
+  web-dashboard:
+    build:
+      context: .
+      dockerfile: apps/web-dashboard/Dockerfile
+      args:
+        # Currently dead config — no client-side code reads this today. Safe at a placeholder.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://placeholder.invalid/graphql}
+    image: ctiq-web-dashboard:prod
+    environment:
+      - BACKEND_URL=http://api-core:3001
+      - COOKIE_SECURE=true
+    networks: [ctiq]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    networks: [ctiq]
+    restart: unless-stopped
+    depends_on: [web-dashboard]
+
+networks:
+  ctiq:
+
+volumes:
+  caddy_data:
+
+secrets:
+  hf_token:
+    environment: HF_TOKEN

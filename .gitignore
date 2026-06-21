@@ -16,6 +16,8 @@ node_modules
 .env*
 .env.local
 .env*.local
+# ...but keep the committable Hetzner deploy template (real .env.production stays ignored).
+!.env.production.example
 
 # Testing
 coverage
