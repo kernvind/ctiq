@@ -43,6 +43,7 @@ services:
     environment:
       - PG_DATABASE_URL=${PG_DATABASE_URL}
       - HF_TOKEN=${HF_TOKEN}
+      - SEARCH_API_TOKEN=${SEARCH_API_TOKEN}
     networks: [ctiq]
     restart: unless-stopped
 
