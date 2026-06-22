@@ -13,7 +13,6 @@ export async function signup(
   formData: FormData,
 ): Promise<SignupState> {
   const result = ZodRegisterFormSchema.safeParse({
-    username: formData.get("username"),
     email: formData.get("email"),
     name: formData.get("name"),
     password: formData.get("password"),
@@ -23,7 +22,7 @@ export async function signup(
   if (!result.success) {
     return { error: flattenZodErrors(result.error) };
   }
-  const { username, email, name, password, role } = result.data;
+  const { email, name, password, role } = result.data;
   const confirmPassword = formData.get("confirmPassword") as string;
 
   if (password !== confirmPassword) {
@@ -34,7 +33,7 @@ export async function signup(
   let refreshToken: string;
   try {
     const data = await sdk.signup_mutation({
-      input: { username, email, password, name: name || undefined, role },
+      input: { email, password, name: name || undefined, role },
     });
     accessToken = data.signup.accessToken;
     refreshToken = data.signup.refreshToken;

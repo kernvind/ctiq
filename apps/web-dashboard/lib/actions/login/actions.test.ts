@@ -28,7 +28,7 @@ describe("login action", () => {
   it("returns a validation error for invalid input and never calls the API", async () => {
     const res = await login(
       null,
-      form({ username: "ab", password: "password123" }),
+      form({ email: "not-an-email", password: "password123" }),
     );
     expect(res).toHaveProperty("error");
     expect(loginMutationMock).not.toHaveBeenCalled();
@@ -40,10 +40,13 @@ describe("login action", () => {
       login: { accessToken: "a-tok", refreshToken: "r-tok" },
     });
 
-    await login(null, form({ username: "alice", password: "password123" }));
+    await login(
+      null,
+      form({ email: "alice@example.com", password: "password123" }),
+    );
 
     expect(loginMutationMock).toHaveBeenCalledWith({
-      input: { username: "alice", password: "password123" },
+      input: { email: "alice@example.com", password: "password123" },
     });
     expect(setAuthCookiesMock).toHaveBeenCalledWith("a-tok", "r-tok");
     expect(redirectMock).toHaveBeenCalledWith("/dashboard");
@@ -56,7 +59,7 @@ describe("login action", () => {
 
     const res = await login(
       null,
-      form({ username: "alice", password: "password123" }),
+      form({ email: "alice@example.com", password: "password123" }),
     );
 
     expect(res).toEqual({ error: "Invalid credentials" });
@@ -68,7 +71,7 @@ describe("login action", () => {
     loginMutationMock.mockRejectedValue(new Error("network down"));
     const res = await login(
       null,
-      form({ username: "alice", password: "password123" }),
+      form({ email: "alice@example.com", password: "password123" }),
     );
     expect(res).toEqual({ error: "Login failed" });
   });

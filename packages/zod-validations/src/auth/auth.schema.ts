@@ -14,7 +14,7 @@ const PASSWORD_VALIDATION_ZOD_SIGNIN = z
   .max(50, "Invalid password");
 
 export const ZodLoginSchema = z.object({
-  username: z.string().min(3).max(50),
+  email: z.email(EMAIL_ERROR_MESSAGE),
   password: PASSWORD_VALIDATION_ZOD_SIGNIN,
 });
 
@@ -26,7 +26,6 @@ export const SIGNUP_ROLES = ["PATIENT", "CLINICIAN", "ANALYST"] as const;
 
 export const ZodSignupSchema = z.object({
   email: z.email(EMAIL_ERROR_MESSAGE),
-  username: z.string().min(3).max(50),
   name: z.string().min(1).max(100).optional(),
   password: PASSWORD_VALIDATION_ZOD_SIGNUP,
   role: z.enum(SIGNUP_ROLES).default("PATIENT"),

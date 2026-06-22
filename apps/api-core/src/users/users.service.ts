@@ -5,7 +5,6 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface UserRecord {
   id: string;
   email: string;
-  username: string;
   passwordHash: string;
   name: string | null;
   role: Role;
@@ -16,11 +15,6 @@ export interface UserRecord {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByUsername(username: string): Promise<UserRecord | null> {
-    return await this.prisma.client.user.findUnique({
-      where: { username },
-    });
-  }
   async findByEmail(email: string): Promise<UserRecord | null> {
     return await this.prisma.client.user.findUnique({
       where: { email },
@@ -32,7 +26,6 @@ export class UsersService {
     });
   }
   async create(
-    username: string,
     email: string,
     passwordHash: string,
     name?: string,
@@ -40,7 +33,7 @@ export class UsersService {
   ): Promise<UserRecord> {
     // role omitted -> Prisma applies the schema default (PATIENT).
     return await this.prisma.client.user.create({
-      data: { username, email, passwordHash, name, role },
+      data: { email, passwordHash, name, role },
     });
   }
 }

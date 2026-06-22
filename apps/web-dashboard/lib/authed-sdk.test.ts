@@ -8,7 +8,7 @@ const { cookieStore, getAuthedSdkMock, refreshSessionMock } = vi.hoisted(() => (
 
 vi.mock('next/headers', () => ({ cookies: vi.fn(async () => cookieStore) }));
 vi.mock('@repo/generated-schemas-web', () => ({ getAuthedSdk: getAuthedSdkMock }));
-vi.mock('@/app/auth-actions', () => ({ refreshSession: refreshSessionMock }));
+vi.mock('@/features/auth/auth-actions', () => ({ refreshSession: refreshSessionMock }));
 
 import { withAuthedSdk } from './authed-sdk';
 

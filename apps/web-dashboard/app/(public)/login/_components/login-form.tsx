@@ -17,7 +17,7 @@ import {
   FieldSeparator,
 } from "@repo/ui/components/field";
 import { Input } from "@repo/ui/components/input";
-import { ShieldCheck, User, Lock } from "lucide-react";
+import { ShieldCheck, Mail, Lock } from "lucide-react";
 import Link from "next/link";
 import { login } from "@/lib/actions/login/actions";
 
@@ -52,14 +52,14 @@ export function LoginForm({
               )}
 
               <Field>
-                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <FieldLabel htmlFor="email">Email</FieldLabel>
                 <div className="relative">
-                  <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                   <Input
-                    id="username"
-                    name="username"
-                    type="text"
-                    placeholder="your username"
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="jane@example.com"
                     className="pl-8"
                     required
                   />

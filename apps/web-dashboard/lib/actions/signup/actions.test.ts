@@ -15,7 +15,6 @@ vi.mock('@repo/generated-schemas-web', () => ({
 import { signup } from './actions';
 
 const VALID = {
-  username: 'bob',
   email: 'bob@example.com',
   name: 'Bob',
   password: 'password123',
@@ -65,7 +64,6 @@ describe('signup action', () => {
 
     expect(signupMutationMock).toHaveBeenCalledWith({
       input: {
-        username: 'bob',
         email: 'bob@example.com',
         password: 'password123',
         name: 'Bob',
@@ -78,12 +76,12 @@ describe('signup action', () => {
 
   it('surfaces the server error message on signup failure', async () => {
     signupMutationMock.mockRejectedValue({
-      response: { errors: [{ message: 'Username already exists' }] },
+      response: { errors: [{ message: 'Email already exists' }] },
     });
 
     const res = await signup(null, form(VALID));
 
-    expect(res).toEqual({ error: 'Username already exists' });
+    expect(res).toEqual({ error: 'Email already exists' });
     expect(setAuthCookiesMock).not.toHaveBeenCalled();
   });
 });

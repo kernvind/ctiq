@@ -35,7 +35,7 @@ export class AuthResolver {
     @Context() ctx: { req?: GqlReq },
   ): Promise<AuthPayload> {
     // Reaching here means the request passed transport + Zod validation.
-    this.logger.log(`login request: username=${input.username}`);
+    this.logger.log(`login request: email=${input.email}`);
     return this.authService.login(input, metaFromContext(ctx));
   }
 
@@ -46,7 +46,7 @@ export class AuthResolver {
   ): Promise<AuthPayload> {
     // Reaching here means the request passed transport + Zod validation.
     this.logger.log(
-      `signup request: username=${input.username}, email=${input.email}, role=${input.role}`,
+      `signup request: email=${input.email}, role=${input.role}`,
     );
     return this.authService.signup(input, metaFromContext(ctx));
   }

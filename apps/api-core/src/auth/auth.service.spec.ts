@@ -10,7 +10,6 @@ const hashMock = hash as jest.Mock;
 
 const user = {
   id: 'u1',
-  username: 'alice',
   email: 'alice@example.com',
   passwordHash: 'stored-hash',
   name: null,
@@ -20,7 +19,6 @@ const user = {
 
 describe('AuthService', () => {
   let usersService: {
-    findByUsername: jest.Mock;
     findByEmail: jest.Mock;
     findById: jest.Mock;
     create: jest.Mock;
@@ -36,7 +34,6 @@ describe('AuthService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     usersService = {
-      findByUsername: jest.fn(),
       findByEmail: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
@@ -56,17 +53,17 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('returns access + refresh tokens with the role claim on success', async () => {
-      usersService.findByUsername.mockResolvedValue(user);
+      usersService.findByEmail.mockResolvedValue(user);
       compareMock.mockResolvedValue(true);
 
       const result = await service.login(
-        { username: 'alice', password: 'pw' },
+        { email: 'alice@example.com', password: 'pw' },
         { ip: '1.1.1.1' },
       );
 
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: 'u1',
-        username: 'alice',
+        email: 'alice@example.com',
         role: Role.CLINICIAN,
       });
       expect(sessionService.issue).toHaveBeenCalledWith('u1', {
@@ -79,20 +76,20 @@ describe('AuthService', () => {
     });
 
     it('rejects an unknown user and never issues a session', async () => {
-      usersService.findByUsername.mockResolvedValue(null);
+      usersService.findByEmail.mockResolvedValue(null);
 
       await expect(
-        service.login({ username: 'ghost', password: 'pw' }),
+        service.login({ email: 'ghost@example.com', password: 'pw' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(sessionService.issue).not.toHaveBeenCalled();
     });
 
     it('rejects a wrong password', async () => {
-      usersService.findByUsername.mockResolvedValue(user);
+      usersService.findByEmail.mockResolvedValue(user);
       compareMock.mockResolvedValue(false);
 
       await expect(
-        service.login({ username: 'alice', password: 'bad' }),
+        service.login({ email: 'alice@example.com', password: 'bad' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
       expect(sessionService.issue).not.toHaveBeenCalled();
     });
@@ -100,7 +97,6 @@ describe('AuthService', () => {
 
   describe('signup', () => {
     const dto = {
-      username: 'bob',
       email: 'bob@example.com',
       password: 'password123',
       name: 'Bob',
@@ -108,7 +104,6 @@ describe('AuthService', () => {
     };
 
     it('creates the user with the mapped role and returns tokens', async () => {
-      usersService.findByUsername.mockResolvedValue(null);
       usersService.findByEmail.mockResolvedValue(null);
       hashMock.mockResolvedValue('new-hash');
       usersService.create.mockResolvedValue({
@@ -120,7 +115,6 @@ describe('AuthService', () => {
       const result = await service.signup(dto);
 
       expect(usersService.create).toHaveBeenCalledWith(
-        'bob',
         'bob@example.com',
         'new-hash',
         'Bob',
@@ -133,17 +127,7 @@ describe('AuthService', () => {
       });
     });
 
-    it('rejects a taken username', async () => {
-      usersService.findByUsername.mockResolvedValue(user);
-
-      await expect(service.signup(dto)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
-      expect(usersService.create).not.toHaveBeenCalled();
-    });
-
     it('rejects a taken email', async () => {
-      usersService.findByUsername.mockResolvedValue(null);
       usersService.findByEmail.mockResolvedValue(user);
 
       await expect(service.signup(dto)).rejects.toBeInstanceOf(
@@ -166,7 +150,7 @@ describe('AuthService', () => {
       expect(sessionService.rotate).toHaveBeenCalledWith('old-refresh', {});
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: 'u1',
-        username: 'alice',
+        email: 'alice@example.com',
         role: Role.CLINICIAN,
       });
       expect(result).toEqual({

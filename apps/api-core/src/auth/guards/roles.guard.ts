@@ -12,7 +12,7 @@ import { ROLES_KEY } from '../decorators/roles.decorator';
 
 interface RequestUser {
   id: string;
-  username: string;
+  email: string;
   role: Role;
 }
 

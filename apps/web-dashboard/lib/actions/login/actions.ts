@@ -13,7 +13,7 @@ export async function login(
   formData: FormData,
 ): Promise<LoginState> {
   const result = ZodLoginSchema.safeParse({
-    username: formData.get("username"),
+    email: formData.get("email"),
     password: formData.get("password"),
   });
   if (!result.success) {

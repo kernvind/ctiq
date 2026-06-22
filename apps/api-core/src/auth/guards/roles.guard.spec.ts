@@ -38,13 +38,13 @@ describe('RolesGuard', () => {
 
   it('allows a user whose role is in the required set', () => {
     reflector.getAllAndOverride.mockReturnValue([Role.ADMIN, Role.ANALYST]);
-    mockUser({ id: 'u1', username: 'a', role: Role.ANALYST });
+    mockUser({ id: 'u1', email: 'a@example.com', role: Role.ANALYST });
     expect(guard.canActivate(context)).toBe(true);
   });
 
   it('denies (fails closed) a user whose role is not allowed', () => {
     reflector.getAllAndOverride.mockReturnValue([Role.ADMIN]);
-    mockUser({ id: 'u1', username: 'a', role: Role.PATIENT });
+    mockUser({ id: 'u1', email: 'a@example.com', role: Role.PATIENT });
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 

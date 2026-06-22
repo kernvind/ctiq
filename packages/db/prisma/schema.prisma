@@ -31,9 +31,8 @@ enum UserStatus {
 }
 
 model User {
-  id       String @id @default(cuid())
-  email    String @unique
-  username String @unique
+  id    String @id @default(cuid())
+  email String @unique
 
   /// @zod.string.min(1).max(255)
   passwordHash String

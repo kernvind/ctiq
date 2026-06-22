@@ -92,7 +92,6 @@ async function main(): Promise<void> {
 
   await test('round-trips signup -> login -> refresh -> logout', async () => {
     const creds = {
-      username: 'e2euser',
       email: 'e2e@example.com',
       password: 'password123',
       role: 'CLINICIAN',
@@ -103,7 +102,7 @@ async function main(): Promise<void> {
     assert.ok(s.data?.signup.accessToken && s.data?.signup.refreshToken);
 
     const l = await gql(LOGIN, {
-      i: { username: creds.username, password: creds.password },
+      i: { email: creds.email, password: creds.password },
     });
     assert.equal(l.errors, undefined);
     const refreshToken = l.data?.login.refreshToken as string;
@@ -124,7 +123,7 @@ async function main(): Promise<void> {
 
   await test('rejects bad login credentials', async () => {
     const res = await gql(LOGIN, {
-      i: { username: 'e2euser', password: 'wrong-password' },
+      i: { email: 'e2e@example.com', password: 'wrong-password' },
     });
     assert.ok(res.errors);
     assert.ok(!res.data?.login);
@@ -132,7 +131,6 @@ async function main(): Promise<void> {
 
   await test('duplicate signup returns a sanitized 409 (no stack trace)', async () => {
     const u = {
-      username: 'dupe',
       email: 'dupe@example.com',
       password: 'password123',
       role: 'PATIENT',

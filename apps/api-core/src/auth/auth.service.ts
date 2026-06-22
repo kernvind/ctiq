@@ -37,26 +37,26 @@ export class AuthService {
   ) {}
 
   private signAccessToken(
-    user: Pick<UserRecord, 'id' | 'username' | 'role'>,
+    user: Pick<UserRecord, 'id' | 'email' | 'role'>,
   ): string {
     return this.jwtService.sign({
       sub: user.id,
-      username: user.username,
+      email: user.email,
       role: user.role,
     });
   }
 
   async login(dto: LoginInput, meta: SessionMeta = {}): Promise<AuthTokens> {
-    const user = await this.usersService.findByUsername(dto.username);
+    const user = await this.usersService.findByEmail(dto.email);
 
     if (!user || typeof dto.password !== 'string') {
-      this.logger.warn(`login: invalid credentials username=${dto.username}`);
+      this.logger.warn(`login: invalid credentials email=${dto.email}`);
       throw new UnauthorizedException('Invalid credentials');
     }
     const passwordMatches = await compare(dto.password, user.passwordHash);
 
     if (!passwordMatches) {
-      this.logger.warn(`login: bad password username=${dto.username}`);
+      this.logger.warn(`login: bad password email=${dto.email}`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -95,14 +95,9 @@ export class AuthService {
 
   async signup(dto: SignupInput, meta: SessionMeta = {}): Promise<AuthTokens> {
     this.logger.log(
-      `signup: start username=${dto.username} email=${dto.email} role=${dto.role}`,
+      `signup: start email=${dto.email} role=${dto.role}`,
     );
 
-    const existingUser = await this.usersService.findByUsername(dto.username);
-    if (existingUser) {
-      this.logger.warn(`signup: username taken username=${dto.username}`);
-      throw new ConflictException('Username already exists');
-    }
     const existingEmail = await this.usersService.findByEmail(dto.email);
     if (existingEmail) {
       this.logger.warn(`signup: email taken email=${dto.email}`);
@@ -110,15 +105,12 @@ export class AuthService {
     }
 
     const role = SIGNUP_ROLE_TO_ROLE[dto.role];
-    this.logger.log(
-      `signup: creating user username=${dto.username} role=${role}`,
-    );
+    this.logger.log(`signup: creating user email=${dto.email} role=${role}`);
 
     let user: UserRecord;
     try {
       const passwordHash = await hash(dto.password, 10);
       user = await this.usersService.create(
-        dto.username,
         dto.email,
         passwordHash,
         dto.name ?? undefined,
@@ -128,7 +120,7 @@ export class AuthService {
       // Surfaces DB/Prisma errors (e.g. schema mismatch, constraint) in the logs
       // instead of only as a generic GraphQL error on the client.
       this.logger.error(
-        `signup: create failed username=${dto.username}: ${(err as Error).message}`,
+        `signup: create failed email=${dto.email}: ${(err as Error).message}`,
         (err as Error).stack,
       );
       throw err;

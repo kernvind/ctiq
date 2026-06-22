@@ -55,7 +55,6 @@ describe('SessionService (integration · real Postgres)', () => {
     const suffix = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const user = await prisma.user.create({
       data: {
-        username: `it_${suffix}`,
         email: `it_${suffix}@example.com`,
         passwordHash: 'x',
       },

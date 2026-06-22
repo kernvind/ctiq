@@ -4,9 +4,6 @@ import { SignupRole } from '../../enums/signup-role.enum';
 @InputType()
 export class SignupInput {
   @Field(() => String)
-  username!: string;
-
-  @Field(() => String)
   email!: string;
 
   @Field(() => String)
