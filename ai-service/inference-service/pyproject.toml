@@ -20,11 +20,25 @@ dependencies = [
     # extra pulls greenlet (required by SQLAlchemy's async engine).
     "sqlalchemy[asyncio] (>=2.0.0,<3.0.0)",
     "sentence-transformers (>=5.5.1,<6.0.0)",
-    "einops (>=0.8.2,<0.9.0)"
+    "einops (>=0.8.2,<0.9.0)",
+    # Declared explicitly (normally transitive via sentence-transformers) so the CPU-only
+    # source pin in [tool.poetry.dependencies] below applies. Keeps the ~4-5GB CUDA runtime
+    # (nvidia-cu12-*, triton) out of the image on the CPU-only deployment.
+    "torch (>=2.7.1,<2.8.0)"
 ]
 
 [tool.poetry]
 packages = [{include = "src"}]
+
+# Attach the CPU-only wheel index to torch (declared in [project.dependencies] above). With
+# PEP 621 deps, [tool.poetry.dependencies] only enriches packages already listed in [project].
+[tool.poetry.dependencies]
+torch = {source = "pytorch-cpu"}
+
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 # ctiq-db is a local path dep, isolated in an optional group so `poetry export
 # --only main` skips it in the Docker deps stage (where the path isn't present).

@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
-import type { TrialDetail } from "@/lib/get-trial";
+import type { TrialDetail } from "@/lib/actions/trial/details/actions";
 
 const STATUS_COLORS: Record<string, string> = {
   RECRUITING:
