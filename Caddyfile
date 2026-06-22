@@ -1,13 +1,12 @@
 # Caddy reverse proxy — the only public-facing container on the VM.
-# Replace your-real-domain.com with the domain whose A/AAAA record points at the VM's IP.
 # Caddy requests a Let's Encrypt cert via HTTP-01 over port 80 and auto-renews it.
-#your-real-domain.com {
-#	reverse_proxy web-dashboard:3000
-#}
+# Requires an A record for hiq.kernvind.com pointing at the VM (5.75.169.62) before first start.
+hiq.kernvind.com {
+	reverse_proxy web-dashboard:3000
+}
 
-# --- No domain yet? Comment out the block above and use this instead to test over
-#     plain HTTP against the VM's IP. Also set COOKIE_SECURE=false in .env.production
-#     while on HTTP, then switch back once DNS + the real domain are in place.
- :80 {
- 	reverse_proxy web-dashboard:3000
- }
+# --- Local / no-DNS fallback: test over plain HTTP against the VM's IP. If you use this,
+#     set COOKIE_SECURE=false in .env.production while on HTTP, then switch back.
+# :80 {
+# 	reverse_proxy web-dashboard:3000
+# }
