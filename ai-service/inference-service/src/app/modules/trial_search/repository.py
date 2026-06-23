@@ -137,6 +137,8 @@ class TrialSearchRepository:
             conditions=trial.conditions or [],
             lead_sponsor_name=trial.lead_sponsor_name,
             lead_sponsor_class=trial.lead_sponsor_class,
+            min_age_raw=trial.min_age_raw,
+            max_age_raw=trial.max_age_raw,
             min_age_years=trial.min_age_years,
             max_age_years=trial.max_age_years,
             sex=trial.sex,

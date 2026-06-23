@@ -45,7 +45,9 @@ query trial_query($nctId: String!) {
       zip
     }
     masking
+    max_age_raw
     max_age_years
+    min_age_raw
     min_age_years
     nct_id
     official_title

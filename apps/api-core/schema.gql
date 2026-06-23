@@ -24,8 +24,14 @@ type ContactInfo {
 type EligibilitySummary {
   accepts_healthy_volunteers: Boolean!
 
+  """Max Age Raw"""
+  max_age_raw: String
+
   """Max Age Years"""
   max_age_years: Float
+
+  """Min Age Raw"""
+  min_age_raw: String
 
   """Min Age Years"""
   min_age_years: Float
@@ -188,8 +194,14 @@ type TrialDetail {
   locations: [TrialLocationDetail!]!
   masking: String
 
+  """Max Age Raw"""
+  max_age_raw: String
+
   """Max Age Years"""
   max_age_years: Float
+
+  """Min Age Raw"""
+  min_age_raw: String
 
   """Min Age Years"""
   min_age_years: Float

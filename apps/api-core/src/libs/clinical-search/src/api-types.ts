@@ -4,454 +4,462 @@
  */
 
 export interface paths {
-  '/api/v1/search/trials': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/search/trials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Trials */
+        get: operations["search_trials_api_v1_search_trials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Search Trials */
-    get: operations['search_trials_api_v1_search_trials_get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/search/trials/{nct_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/search/trials/{nct_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Trial */
+        get: operations["get_trial_api_v1_search_trials__nct_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Get Trial */
-    get: operations['get_trial_api_v1_search_trials__nct_id__get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Root */
+        get: operations["read_root__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Read Root */
-    get: operations['read_root__get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /** Collaborator */
-    Collaborator: {
-      /** Name */
-      name?: string | null;
-      /** Class */
-      class?: string | null;
+    schemas: {
+        /** Collaborator */
+        Collaborator: {
+            /** Name */
+            name?: string | null;
+            /** Class */
+            class?: string | null;
+        };
+        /** ContactInfo */
+        ContactInfo: {
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Email */
+            email?: string | null;
+        };
+        /** EligibilitySummary */
+        EligibilitySummary: {
+            /** Min Age Raw */
+            min_age_raw?: string | null;
+            /** Max Age Raw */
+            max_age_raw?: string | null;
+            /** Min Age Years */
+            min_age_years?: number | null;
+            /** Max Age Years */
+            max_age_years?: number | null;
+            /**
+             * Sex
+             * @default ALL
+             */
+            sex: string;
+            /** Accepts Healthy Volunteers */
+            accepts_healthy_volunteers?: boolean | null;
+            /** Short Summary */
+            short_summary?: string | null;
+        };
+        /** Facility */
+        Facility: {
+            /** Facility */
+            facility?: string | null;
+            /** City */
+            city?: string | null;
+            /** State */
+            state?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Status */
+            status?: string | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LocationSummary */
+        LocationSummary: {
+            /**
+             * Total Sites
+             * @default 0
+             */
+            total_sites: number;
+            /**
+             * Recruiting Sites
+             * @default 0
+             */
+            recruiting_sites: number;
+            /**
+             * Sample Facilities
+             * @default []
+             */
+            sample_facilities: components["schemas"]["Facility"][];
+            /** Nearest Facility */
+            nearest_facility?: string | null;
+            /** Nearest Distance Km */
+            nearest_distance_km?: number | null;
+        };
+        /** MatchingChunk */
+        MatchingChunk: {
+            /** Field Type */
+            field_type: string;
+            /** Chunk Text */
+            chunk_text: string;
+            /** Distance */
+            distance: number;
+        };
+        /** Reference */
+        Reference: {
+            /** Citation */
+            citation?: string | null;
+            /** Type */
+            type?: string | null;
+            /** Pmid */
+            pmid?: string | null;
+        };
+        /** TrialArmGroupDetail */
+        TrialArmGroupDetail: {
+            /** Label */
+            label?: string | null;
+            /** Type */
+            type?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /** TrialCard */
+        TrialCard: {
+            /** Nct Id */
+            nct_id: string;
+            /** Brief Title */
+            brief_title: string;
+            /** Overall Status */
+            overall_status: string;
+            /** Phases */
+            phases: string[];
+            best_matching_chunk: components["schemas"]["MatchingChunk"];
+            /** Match Explanation */
+            match_explanation?: string | null;
+            /**
+             * Top Chunks
+             * @default []
+             */
+            top_chunks: components["schemas"]["MatchingChunk"][];
+            eligibility: components["schemas"]["EligibilitySummary"];
+            locations: components["schemas"]["LocationSummary"];
+            /** Lead Sponsor Name */
+            lead_sponsor_name: string;
+            /** Lead Sponsor Class */
+            lead_sponsor_class: string;
+        };
+        /** TrialDetail */
+        TrialDetail: {
+            /** Nct Id */
+            nct_id: string;
+            /** Brief Title */
+            brief_title?: string | null;
+            /** Official Title */
+            official_title?: string | null;
+            /** Acronym */
+            acronym?: string | null;
+            /** Organization */
+            organization?: string | null;
+            /** Overall Status */
+            overall_status?: string | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** Completion Date */
+            completion_date?: string | null;
+            /** Primary Completion Date */
+            primary_completion_date?: string | null;
+            /** Last Update Post Date */
+            last_update_post_date?: string | null;
+            /** Lead Sponsor Name */
+            lead_sponsor_name?: string | null;
+            /** Lead Sponsor Class */
+            lead_sponsor_class?: string | null;
+            /**
+             * Collaborators
+             * @default []
+             */
+            collaborators: components["schemas"]["Collaborator"][];
+            /** Study Type */
+            study_type?: string | null;
+            /**
+             * Phases
+             * @default []
+             */
+            phases: string[];
+            /** Allocation */
+            allocation?: string | null;
+            /** Intervention Model */
+            intervention_model?: string | null;
+            /** Primary Purpose */
+            primary_purpose?: string | null;
+            /** Masking */
+            masking?: string | null;
+            /** Enrollment Count */
+            enrollment_count?: number | null;
+            /** Enrollment Type */
+            enrollment_type?: string | null;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
+            /**
+             * Keywords
+             * @default []
+             */
+            keywords: string[];
+            /** Eligibility Criteria */
+            eligibility_criteria?: string | null;
+            /** Min Age Raw */
+            min_age_raw?: string | null;
+            /** Max Age Raw */
+            max_age_raw?: string | null;
+            /** Min Age Years */
+            min_age_years?: number | null;
+            /** Max Age Years */
+            max_age_years?: number | null;
+            /** Sex */
+            sex?: string | null;
+            /**
+             * Std Ages
+             * @default []
+             */
+            std_ages: string[];
+            /** Healthy Volunteers */
+            healthy_volunteers?: boolean | null;
+            /** Brief Summary */
+            brief_summary?: string | null;
+            /** Detailed Description */
+            detailed_description?: string | null;
+            /**
+             * Central Contacts
+             * @default []
+             */
+            central_contacts: components["schemas"]["ContactInfo"][];
+            /**
+             * References
+             * @default []
+             */
+            references: components["schemas"]["Reference"][];
+            /**
+             * Locations
+             * @default []
+             */
+            locations: components["schemas"]["TrialLocationDetail"][];
+            /**
+             * Interventions
+             * @default []
+             */
+            interventions: components["schemas"]["TrialInterventionDetail"][];
+            /**
+             * Outcomes
+             * @default []
+             */
+            outcomes: components["schemas"]["TrialOutcomeDetail"][];
+            /**
+             * Arm Groups
+             * @default []
+             */
+            arm_groups: components["schemas"]["TrialArmGroupDetail"][];
+            /**
+             * Officials
+             * @default []
+             */
+            officials: components["schemas"]["TrialOfficialDetail"][];
+        };
+        /** TrialInterventionDetail */
+        TrialInterventionDetail: {
+            /** Type */
+            type?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /** TrialLocationDetail */
+        TrialLocationDetail: {
+            /** Facility */
+            facility?: string | null;
+            /** City */
+            city?: string | null;
+            /** State */
+            state?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Zip */
+            zip?: string | null;
+            /** Status */
+            status?: string | null;
+        };
+        /** TrialOfficialDetail */
+        TrialOfficialDetail: {
+            /** Name */
+            name?: string | null;
+            /** Affiliation */
+            affiliation?: string | null;
+            /** Role */
+            role?: string | null;
+        };
+        /** TrialOutcomeDetail */
+        TrialOutcomeDetail: {
+            /** Outcome Type */
+            outcome_type?: string | null;
+            /** Measure */
+            measure?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Time Frame */
+            time_frame?: string | null;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
     };
-    /** ContactInfo */
-    ContactInfo: {
-      /** Name */
-      name?: string | null;
-      /** Role */
-      role?: string | null;
-      /** Phone */
-      phone?: string | null;
-      /** Email */
-      email?: string | null;
-    };
-    /** EligibilitySummary */
-    EligibilitySummary: {
-      /** Min Age Years */
-      min_age_years?: number | null;
-      /** Max Age Years */
-      max_age_years?: number | null;
-      /**
-       * Sex
-       * @default ALL
-       */
-      sex: string;
-      /** Accepts Healthy Volunteers */
-      accepts_healthy_volunteers?: boolean | null;
-      /** Short Summary */
-      short_summary?: string | null;
-    };
-    /** Facility */
-    Facility: {
-      /** Facility */
-      facility?: string | null;
-      /** City */
-      city?: string | null;
-      /** State */
-      state?: string | null;
-      /** Country */
-      country?: string | null;
-      /** Status */
-      status?: string | null;
-    };
-    /** HTTPValidationError */
-    HTTPValidationError: {
-      /** Detail */
-      detail?: components['schemas']['ValidationError'][];
-    };
-    /** LocationSummary */
-    LocationSummary: {
-      /**
-       * Total Sites
-       * @default 0
-       */
-      total_sites: number;
-      /**
-       * Recruiting Sites
-       * @default 0
-       */
-      recruiting_sites: number;
-      /**
-       * Sample Facilities
-       * @default []
-       */
-      sample_facilities: components['schemas']['Facility'][];
-      /** Nearest Facility */
-      nearest_facility?: string | null;
-      /** Nearest Distance Km */
-      nearest_distance_km?: number | null;
-    };
-    /** MatchingChunk */
-    MatchingChunk: {
-      /** Field Type */
-      field_type: string;
-      /** Chunk Text */
-      chunk_text: string;
-      /** Distance */
-      distance: number;
-    };
-    /** Reference */
-    Reference: {
-      /** Citation */
-      citation?: string | null;
-      /** Type */
-      type?: string | null;
-      /** Pmid */
-      pmid?: string | null;
-    };
-    /** TrialArmGroupDetail */
-    TrialArmGroupDetail: {
-      /** Label */
-      label?: string | null;
-      /** Type */
-      type?: string | null;
-      /** Description */
-      description?: string | null;
-    };
-    /** TrialCard */
-    TrialCard: {
-      /** Nct Id */
-      nct_id: string;
-      /** Brief Title */
-      brief_title: string;
-      /** Overall Status */
-      overall_status: string;
-      /** Phases */
-      phases: string[];
-      best_matching_chunk: components['schemas']['MatchingChunk'];
-      /** Match Explanation */
-      match_explanation?: string | null;
-      /**
-       * Top Chunks
-       * @default []
-       */
-      top_chunks: components['schemas']['MatchingChunk'][];
-      eligibility: components['schemas']['EligibilitySummary'];
-      locations: components['schemas']['LocationSummary'];
-      /** Lead Sponsor Name */
-      lead_sponsor_name: string;
-      /** Lead Sponsor Class */
-      lead_sponsor_class: string;
-    };
-    /** TrialDetail */
-    TrialDetail: {
-      /** Nct Id */
-      nct_id: string;
-      /** Brief Title */
-      brief_title?: string | null;
-      /** Official Title */
-      official_title?: string | null;
-      /** Acronym */
-      acronym?: string | null;
-      /** Organization */
-      organization?: string | null;
-      /** Overall Status */
-      overall_status?: string | null;
-      /** Start Date */
-      start_date?: string | null;
-      /** Completion Date */
-      completion_date?: string | null;
-      /** Primary Completion Date */
-      primary_completion_date?: string | null;
-      /** Last Update Post Date */
-      last_update_post_date?: string | null;
-      /** Lead Sponsor Name */
-      lead_sponsor_name?: string | null;
-      /** Lead Sponsor Class */
-      lead_sponsor_class?: string | null;
-      /**
-       * Collaborators
-       * @default []
-       */
-      collaborators: components['schemas']['Collaborator'][];
-      /** Study Type */
-      study_type?: string | null;
-      /**
-       * Phases
-       * @default []
-       */
-      phases: string[];
-      /** Allocation */
-      allocation?: string | null;
-      /** Intervention Model */
-      intervention_model?: string | null;
-      /** Primary Purpose */
-      primary_purpose?: string | null;
-      /** Masking */
-      masking?: string | null;
-      /** Enrollment Count */
-      enrollment_count?: number | null;
-      /** Enrollment Type */
-      enrollment_type?: string | null;
-      /**
-       * Conditions
-       * @default []
-       */
-      conditions: string[];
-      /**
-       * Keywords
-       * @default []
-       */
-      keywords: string[];
-      /** Eligibility Criteria */
-      eligibility_criteria?: string | null;
-      /** Min Age Years */
-      min_age_years?: number | null;
-      /** Max Age Years */
-      max_age_years?: number | null;
-      /** Sex */
-      sex?: string | null;
-      /**
-       * Std Ages
-       * @default []
-       */
-      std_ages: string[];
-      /** Healthy Volunteers */
-      healthy_volunteers?: boolean | null;
-      /** Brief Summary */
-      brief_summary?: string | null;
-      /** Detailed Description */
-      detailed_description?: string | null;
-      /**
-       * Central Contacts
-       * @default []
-       */
-      central_contacts: components['schemas']['ContactInfo'][];
-      /**
-       * References
-       * @default []
-       */
-      references: components['schemas']['Reference'][];
-      /**
-       * Locations
-       * @default []
-       */
-      locations: components['schemas']['TrialLocationDetail'][];
-      /**
-       * Interventions
-       * @default []
-       */
-      interventions: components['schemas']['TrialInterventionDetail'][];
-      /**
-       * Outcomes
-       * @default []
-       */
-      outcomes: components['schemas']['TrialOutcomeDetail'][];
-      /**
-       * Arm Groups
-       * @default []
-       */
-      arm_groups: components['schemas']['TrialArmGroupDetail'][];
-      /**
-       * Officials
-       * @default []
-       */
-      officials: components['schemas']['TrialOfficialDetail'][];
-    };
-    /** TrialInterventionDetail */
-    TrialInterventionDetail: {
-      /** Type */
-      type?: string | null;
-      /** Name */
-      name?: string | null;
-      /** Description */
-      description?: string | null;
-    };
-    /** TrialLocationDetail */
-    TrialLocationDetail: {
-      /** Facility */
-      facility?: string | null;
-      /** City */
-      city?: string | null;
-      /** State */
-      state?: string | null;
-      /** Country */
-      country?: string | null;
-      /** Zip */
-      zip?: string | null;
-      /** Status */
-      status?: string | null;
-    };
-    /** TrialOfficialDetail */
-    TrialOfficialDetail: {
-      /** Name */
-      name?: string | null;
-      /** Affiliation */
-      affiliation?: string | null;
-      /** Role */
-      role?: string | null;
-    };
-    /** TrialOutcomeDetail */
-    TrialOutcomeDetail: {
-      /** Outcome Type */
-      outcome_type?: string | null;
-      /** Measure */
-      measure?: string | null;
-      /** Description */
-      description?: string | null;
-      /** Time Frame */
-      time_frame?: string | null;
-    };
-    /** ValidationError */
-    ValidationError: {
-      /** Location */
-      loc: (string | number)[];
-      /** Message */
-      msg: string;
-      /** Error Type */
-      type: string;
-      /** Input */
-      input?: unknown;
-      /** Context */
-      ctx?: Record<string, never>;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  search_trials_api_v1_search_trials_get: {
-    parameters: {
-      query: {
-        /** @description Search query */
-        q: string;
-      };
-      header?: {
-        'x-internal-token'?: string | null;
-      };
-      path?: never;
-      cookie?: never;
+    search_trials_api_v1_search_trials_get: {
+        parameters: {
+            query: {
+                /** @description Search query */
+                q: string;
+            };
+            header?: {
+                "x-internal-token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialCard"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    get_trial_api_v1_search_trials__nct_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-token"?: string | null;
+            };
+            path: {
+                /** @description ClinicalTrials.gov NCT id */
+                nct_id: string;
+            };
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['TrialCard'][];
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrialDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
     };
-  };
-  get_trial_api_v1_search_trials__nct_id__get: {
-    parameters: {
-      query?: never;
-      header?: {
-        'x-internal-token'?: string | null;
-      };
-      path: {
-        /** @description ClinicalTrials.gov NCT id */
-        nct_id: string;
-      };
-      cookie?: never;
+    read_root__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
     };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['TrialDetail'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  read_root__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': unknown;
-        };
-      };
-    };
-  };
 }

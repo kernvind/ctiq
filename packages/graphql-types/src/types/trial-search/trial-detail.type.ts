@@ -195,6 +195,12 @@ export class TrialDetail {
   @Field(() => String, { nullable: true, description: "Eligibility Criteria" })
   eligibility_criteria?: string | null;
 
+  @Field(() => String, { nullable: true, description: "Min Age Raw" })
+  min_age_raw?: string | null;
+
+  @Field(() => String, { nullable: true, description: "Max Age Raw" })
+  max_age_raw?: string | null;
+
   @Field(() => Float, { nullable: true, description: "Min Age Years" })
   min_age_years?: number | null;
 

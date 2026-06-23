@@ -11,6 +11,8 @@ def make_row(**overrides) -> TrialSearchResultRow:
         phases=["PHASE2"],
         lead_sponsor_name="Acme Pharma",
         lead_sponsor_class="INDUSTRY",
+        min_age_raw="18 Years",
+        max_age_raw="65 Years",
         min_age_years=18.0,
         max_age_years=65.0,
         sex="ALL",
@@ -36,6 +38,9 @@ class TestToCard:
         assert card.best_matching_chunk.field_type == "summary"
         assert card.eligibility.sex == "ALL"
         assert card.eligibility.accepts_healthy_volunteers is True
+        # Raw CT.gov age strings pass straight through (preferred over the parsed floats).
+        assert card.eligibility.min_age_raw == "18 Years"
+        assert card.eligibility.max_age_raw == "65 Years"
         assert card.locations.total_sites == 5
         assert card.lead_sponsor_name == "Acme Pharma"
 

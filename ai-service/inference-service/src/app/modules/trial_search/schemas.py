@@ -32,6 +32,8 @@ class TrialSearchResultRow(BaseModel):
     lead_sponsor_class: Optional[str] = None
 
     # Eligibility
+    min_age_raw: Optional[str] = None
+    max_age_raw: Optional[str] = None
     min_age_years: Optional[float] = None
     max_age_years: Optional[float] = None
     sex: Optional[str] = None
@@ -52,6 +54,8 @@ class TrialSearchResultRow(BaseModel):
 class EligibilitySummary(BaseModel):
     model_config = ConfigDict(frozen=True, from_attributes=True)
 
+    min_age_raw: Optional[str] = None
+    max_age_raw: Optional[str] = None
     min_age_years: Optional[float] = None
     max_age_years: Optional[float] = None
     sex: str = "ALL"
@@ -208,6 +212,8 @@ class TrialDetail(BaseModel):
 
     # Eligibility
     eligibility_criteria: Optional[str] = None
+    min_age_raw: Optional[str] = None
+    max_age_raw: Optional[str] = None
     min_age_years: Optional[float] = None
     max_age_years: Optional[float] = None
     sex: Optional[str] = None

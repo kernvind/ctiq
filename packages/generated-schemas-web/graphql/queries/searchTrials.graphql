@@ -8,7 +8,9 @@ query searchTrials_query($q: SearchTrialInput!) {
     brief_title
     eligibility {
       accepts_healthy_volunteers
+      max_age_raw
       max_age_years
+      min_age_raw
       min_age_years
       sex
       short_summary

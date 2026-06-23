@@ -17,6 +17,8 @@ def to_card(row) -> TrialCard:
             distance=row.best_chunk.distance,
         ),
         eligibility=EligibilitySummary(
+            min_age_raw=row.min_age_raw,
+            max_age_raw=row.max_age_raw,
             min_age_years=row.min_age_years,
             max_age_years=row.max_age_years,
             sex=row.sex or "ALL",

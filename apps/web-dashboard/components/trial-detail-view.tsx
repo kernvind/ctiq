@@ -8,6 +8,8 @@ import {
   CardTitle,
 } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
+import { rigorBadges } from "@/lib/trial-rigor";
+import { formatAgeRange } from "@/lib/format-age";
 import type { TrialDetail } from "@/lib/actions/trial/details/actions";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -85,12 +87,12 @@ function Field({
  * already on screen).
  */
 export function TrialDetailView({ trial }: { trial: TrialDetail }) {
-  const ageRange = [
-    trial.min_age_years != null ? `${trial.min_age_years}y` : null,
-    trial.max_age_years != null ? `${trial.max_age_years}y` : null,
-  ]
-    .filter(Boolean)
-    .join(" – ");
+  const ageRange = formatAgeRange(
+    { raw: trial.min_age_raw, years: trial.min_age_years },
+    { raw: trial.max_age_raw, years: trial.max_age_years },
+  );
+
+  const rigor = rigorBadges(trial);
 
   const ctGovUrl = `https://clinicaltrials.gov/study/${trial.nct_id}`;
   const router = useRouter();
@@ -136,6 +138,18 @@ export function TrialDetailView({ trial }: { trial: TrialDetail }) {
               <div className="mt-2 flex flex-wrap gap-1">
                 {trial.phases.map((p) => (
                   <Badge key={p}>{p}</Badge>
+                ))}
+              </div>
+            )}
+            {rigor.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1">
+                {rigor.map((label) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
+                  >
+                    {label}
+                  </span>
                 ))}
               </div>
             )}

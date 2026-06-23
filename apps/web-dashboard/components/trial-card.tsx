@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
+import { formatAgeRange } from "@/lib/format-age";
 
 const STATUS_COLORS: Record<string, string> = {
   RECRUITING: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
@@ -36,12 +37,10 @@ function PhaseBadge({ phase }: { phase: string }) {
 export function TrialCard({ trial }: { trial: TrialCardType }) {
   const { eligibility, locations } = trial;
 
-  const ageRange = [
-    eligibility.min_age_years != null ? `${eligibility.min_age_years}y` : null,
-    eligibility.max_age_years != null ? `${eligibility.max_age_years}y` : null,
-  ]
-    .filter(Boolean)
-    .join(" – ");
+  const ageRange = formatAgeRange(
+    { raw: eligibility.min_age_raw, years: eligibility.min_age_years },
+    { raw: eligibility.max_age_raw, years: eligibility.max_age_years },
+  );
 
   return (
     <Card className="w-full">
