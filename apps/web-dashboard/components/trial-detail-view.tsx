@@ -86,7 +86,15 @@ function Field({
  * `backHref` renders an optional "back to search" link (omit it when the results list is
  * already on screen).
  */
-export function TrialDetailView({ trial }: { trial: TrialDetail }) {
+export function TrialDetailView({
+  trial,
+  actions,
+}: {
+  trial: TrialDetail;
+  // Optional authed-only controls (e.g. Save to watchlist). The public detail page
+  // passes nothing; the dashboard page passes a SaveTrialButton.
+  actions?: React.ReactNode;
+}) {
   const ageRange = formatAgeRange(
     { raw: trial.min_age_raw, years: trial.min_age_years },
     { raw: trial.max_age_raw, years: trial.max_age_years },
@@ -108,14 +116,17 @@ export function TrialDetailView({ trial }: { trial: TrialDetail }) {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to search
           </Button>
 
-          <a
-            href={ctGovUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-          >
-            ClinicalTrials.gov <ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex items-center gap-3">
+            {actions}
+            <a
+              href={ctGovUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+            >
+              ClinicalTrials.gov <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         </div>
 
         {/* Header */}

@@ -1,0 +1,7 @@
+mutation saveTrial_mutation($nctId: String!) {
+  saveTrial(nctId: $nctId) {
+    createdAt
+    id
+    nctId
+  }
+}

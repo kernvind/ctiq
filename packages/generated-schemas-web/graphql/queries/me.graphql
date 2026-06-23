@@ -1,0 +1,8 @@
+query me_query {
+  me {
+    email
+    id
+    name
+    role
+  }
+}

@@ -47,8 +47,26 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions Session[]
+  sessions    Session[]
+  savedTrials SavedTrial[]
 
+  @@schema("app")
+}
+
+/// A trial a user has bookmarked. `nctId` is a by-ID reference into the clinical-trial
+/// domain (owned by ctiq-db), NOT a cross-ORM foreign key — the trial tables live in a
+/// separate schema/ORM. One row per (user, trial); unique constraint makes saving
+/// idempotent.
+model SavedTrial {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nctId  String
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, nctId])
+  @@index([userId])
   @@schema("app")
 }
 

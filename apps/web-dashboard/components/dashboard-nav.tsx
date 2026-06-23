@@ -7,6 +7,7 @@ import { cn } from "@repo/ui/lib/utils";
 const NAV_LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/trials", label: "Trial Search" },
+  { href: "/dashboard/saved", label: "Saved" },
 ];
 
 export function DashboardNav() {

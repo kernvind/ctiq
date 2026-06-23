@@ -1,0 +1,3 @@
+mutation unsaveTrial_mutation($nctId: String!) {
+  unsaveTrial(nctId: $nctId)
+}

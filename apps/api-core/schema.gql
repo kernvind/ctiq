@@ -21,6 +21,11 @@ type ContactInfo {
   role: String
 }
 
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
 type EligibilitySummary {
   accepts_healthy_volunteers: Boolean!
 
@@ -79,11 +84,15 @@ type Mutation {
   login(input: LoginInput!): AuthPayload!
   logout(refreshToken: String!): Boolean!
   refresh(refreshToken: String!): AuthPayload!
+  saveTrial(nctId: String!): SavedTrial!
   signup(input: SignupInput!): AuthPayload!
+  unsaveTrial(nctId: String!): Boolean!
 }
 
 type Query {
   health: String!
+  me: User!
+  savedTrials: [SavedTrial!]!
   searchTrials(q: SearchTrialInput!): [TrialCard!]!
   trial(nctId: String!): TrialDetail
 }
@@ -92,6 +101,20 @@ type Reference {
   citation: String
   pmid: String
   type: String
+}
+
+"""A user's assigned role."""
+enum Role {
+  ADMIN
+  ANALYST
+  CLINICIAN
+  PATIENT
+}
+
+type SavedTrial {
+  createdAt: DateTime!
+  id: ID!
+  nctId: String!
 }
 
 input SearchTrialInput {
@@ -267,4 +290,11 @@ type TrialOutcome {
 
   """Time Frame"""
   time_frame: String
+}
+
+type User {
+  email: String!
+  id: ID!
+  name: String
+  role: Role!
 }
