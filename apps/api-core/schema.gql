@@ -21,6 +21,12 @@ type ContactInfo {
   role: String
 }
 
+input CreateLandscapeInput {
+  name: String!
+  phase: String
+  q: String!
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
@@ -54,6 +60,20 @@ type Facility {
   status: String
 }
 
+type Landscape {
+  createdAt: DateTime!
+  id: ID!
+  lastCheckedAt: DateTime
+  lastSeenNctIds: [String!]!
+  name: String!
+  spec: LandscapeSpec!
+}
+
+type LandscapeSpec {
+  phase: String
+  q: String!
+}
+
 type LocationSummary {
   """Nearest Distance in Kilometers"""
   nearest_distance_km: Float
@@ -81,8 +101,11 @@ type MatchingChunk {
 }
 
 type Mutation {
+  createLandscape(input: CreateLandscapeInput!): Landscape!
+  deleteLandscape(id: ID!): Boolean!
   login(input: LoginInput!): AuthPayload!
   logout(refreshToken: String!): Boolean!
+  markLandscapeSeen(id: ID!, nctIds: [String!]!): Landscape
   refresh(refreshToken: String!): AuthPayload!
   saveTrial(nctId: String!): SavedTrial!
   signup(input: SignupInput!): AuthPayload!
@@ -91,6 +114,7 @@ type Mutation {
 
 type Query {
   health: String!
+  landscapes: [Landscape!]!
   me: User!
   savedTrials: [SavedTrial!]!
   searchTrials(q: SearchTrialInput!): [TrialCard!]!

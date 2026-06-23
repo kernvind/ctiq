@@ -12,6 +12,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TrialSearchModule } from './trial-search/trial-search.module';
 import { SavedTrialsModule } from './saved-trials/saved-trials.module';
+import { LandscapesModule } from './landscapes/landscapes.module';
 import { HealthResolver } from './health/health.resolver';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -42,6 +43,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     AuthModule,
     TrialSearchModule,
     SavedTrialsModule,
+    LandscapesModule,
 
     // 4. GraphQL gateway setup
     GraphQLModule.forRoot<ApolloDriverConfig>({

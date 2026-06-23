@@ -1,0 +1,13 @@
+query landscapes_query {
+  landscapes {
+    createdAt
+    id
+    lastCheckedAt
+    lastSeenNctIds
+    name
+    spec {
+      phase
+      q
+    }
+  }
+}

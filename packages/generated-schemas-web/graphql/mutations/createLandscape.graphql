@@ -1,0 +1,13 @@
+mutation createLandscape_mutation($input: CreateLandscapeInput!) {
+  createLandscape(input: $input) {
+    createdAt
+    id
+    lastCheckedAt
+    lastSeenNctIds
+    name
+    spec {
+      phase
+      q
+    }
+  }
+}

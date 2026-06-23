@@ -1,0 +1,3 @@
+mutation deleteLandscape_mutation($id: ID!) {
+  deleteLandscape(id: $id)
+}

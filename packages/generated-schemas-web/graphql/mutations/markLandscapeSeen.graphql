@@ -1,0 +1,13 @@
+mutation markLandscapeSeen_mutation($id: ID!, $nctIds: [String!]!) {
+  markLandscapeSeen(id: $id, nctIds: $nctIds) {
+    createdAt
+    id
+    lastCheckedAt
+    lastSeenNctIds
+    name
+    spec {
+      phase
+      q
+    }
+  }
+}

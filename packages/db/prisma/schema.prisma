@@ -49,7 +49,31 @@ model User {
 
   sessions    Session[]
   savedTrials SavedTrial[]
+  landscapes  Landscape[]
 
+  @@schema("app")
+}
+
+/// A saved "landscape": a named, re-runnable query an analyst monitors for new trials.
+/// `spec` is an agent-ready JSON query (v1: { q, phase? } wrapping the semantic search) —
+/// kept as JSON so the future NL-to-query agent can store richer specs without a schema
+/// change. `lastSeenNctIds` + `lastCheckedAt` power the on-view "new since last check"
+/// delta (the v1 monitoring loop; a scheduled agent replaces it later).
+model Landscape {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name String
+  spec Json
+
+  lastSeenNctIds String[]  @default([])
+  lastCheckedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
   @@schema("app")
 }
 
