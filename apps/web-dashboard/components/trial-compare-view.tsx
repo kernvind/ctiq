@@ -1,5 +1,9 @@
+"use client";
+import { useRouter } from "next/navigation";
+
+import { Button } from "@repo/ui/components/button";
 import { Fragment } from "react";
-import { ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { rigorBadges } from "@/lib/trial-rigor";
 import { formatAgeRange } from "@/lib/format-age";
 import type { TrialDetail } from "@/lib/actions/trial/details/actions";
@@ -44,7 +48,8 @@ const ROWS: { label: string; render: (t: TrialDetail) => React.ReactNode }[] = [
   { label: "Status", render: (t) => <StatusBadge status={t.overall_status} /> },
   {
     label: "Phase",
-    render: (t) => (t.phases && t.phases.length > 0 ? t.phases.join(", ") : DASH),
+    render: (t) =>
+      t.phases && t.phases.length > 0 ? t.phases.join(", ") : DASH,
   },
   {
     label: "Design",
@@ -85,9 +90,17 @@ const ROWS: { label: string; render: (t: TrialDetail) => React.ReactNode }[] = [
  * `?ids=` URL, see `app/(public)/compare/page.tsx`.
  */
 export function TrialCompareView({ trials }: { trials: TrialDetail[] }) {
+  const router = useRouter();
   return (
     <div className="p-6">
       <div className="mx-auto max-w-5xl">
+        <Button
+          variant="link"
+          className="gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+          onClick={() => router.back()}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to search
+        </Button>
         <h1 className="mb-4 text-sm font-semibold">
           Comparing {trials.length} trials
         </h1>
