@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@repo/ui/lib/utils";
 import { TrialCard } from "@/components/trial-card";
+import { SaveLandscapeButton } from "@/components/save-landscape-button";
 import { partitionByEnrollment } from "@/lib/trial-status";
 import {
   buildCompareHref,
@@ -103,12 +104,18 @@ export function TrialResultsList({
     );
   };
 
+  // Saving a search as a landscape is an authed (dashboard) feature only.
+  const isDashboard = basePath.startsWith("/dashboard");
+
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-muted-foreground">
-        {open.length} enrolling trial{open.length !== 1 ? "s" : ""}
-        {closed.length > 0 ? ` · ${closed.length} not enrolling` : ""}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {open.length} enrolling trial{open.length !== 1 ? "s" : ""}
+          {closed.length > 0 ? ` · ${closed.length} not enrolling` : ""}
+        </p>
+        {isDashboard && <SaveLandscapeButton query={query} />}
+      </div>
 
       {open.map(renderCard)}
 
