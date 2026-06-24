@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     # pass); requests are rejected until it is configured (see api/security.py).
     search_api_token: str = ""
 
+    # ── LLM query planner (OpenAI) ────────────────────────────────────────────
+    # NL->structured-query agent (planning/llm_planner.py). The provider is OpenAI but
+    # the call is isolated behind the planner, so the model is a swappable detail.
+    # OPENAI_API_KEY is also the standard env the OpenAI SDK reads.
+    openai_api_key: str = ""
+    # Cheap, fast, structured-output-capable model for query compilation. Override via
+    # LLM_MODEL to use a larger model for harder queries.
+    llm_model: str = "gpt-5-mini"
+
     @property
     def asyncpg_database_url(self) -> str:
         """Strip SQLAlchemy driver prefix so asyncpg can use the URL directly."""

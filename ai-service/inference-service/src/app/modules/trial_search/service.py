@@ -30,8 +30,8 @@ class TrialSearchService:
 
         logger.info("Search request received: query=%r", query)
 
-        # 1. Plan: decide what to search and how
-        plan: QueryPlan = self.query_planner.plan(query=query)
+        # 1. Plan: decide what to search and how (async — the planner may call an LLM)
+        plan: QueryPlan = await self.query_planner.plan(query=query)
         logger.info(
             "Query plan: intent=%s, fields=%s, phase_filter=%s, top_k=%d",
             plan.intent.value,

@@ -21,7 +21,10 @@ dependencies = [
     "sqlalchemy[asyncio] (>=2.0.0,<3.0.0)",
     "sentence-transformers (>=5.5.1,<6.0.0)",
     "einops (>=0.8.2,<0.9.0)",
-    "torch (>=2.7.1,<2.8.0)"
+    "torch (>=2.7.1,<2.8.0)",
+    # NL->structured-query agent (planning/llm_planner.py). Provider is OpenAI; the call
+    # is isolated behind the planner so the model/provider stays a swappable detail.
+    "openai (>=1.50.0,<2.0.0)"
 ]
 
 [tool.poetry]

@@ -6,10 +6,7 @@ import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthedUser } from '../auth/decorators/current-user.decorator';
 import { zodPipe } from '../common/pipes/zod-validation.pipe';
-import {
-  LandscapesService,
-  LandscapeRecord,
-} from './landscapes.service';
+import { LandscapesService, LandscapeRecord } from './landscapes.service';
 
 /** Map a DB record (spec is JSON) to the typed GraphQL Landscape. */
 function toLandscape(r: LandscapeRecord): Landscape {
@@ -39,7 +36,8 @@ export class LandscapesResolver {
   @UseGuards(GqlAuthGuard)
   async createLandscape(
     @CurrentUser() user: AuthedUser,
-    @Args('input', zodPipe(ZodCreateLandscapeSchema)) input: CreateLandscapeInput,
+    @Args('input', zodPipe(ZodCreateLandscapeSchema))
+    input: CreateLandscapeInput,
   ): Promise<Landscape> {
     const row = await this.service.create(user.id, {
       name: input.name,

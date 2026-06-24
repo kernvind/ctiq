@@ -11,7 +11,8 @@ def make_service(rows=None):
     embedder = MagicMock()
     embedder.embed_query = MagicMock(return_value=[0.1, 0.2])
     planner = MagicMock()
-    planner.plan = MagicMock(
+    # The service awaits the planner now (it may call an LLM), so mock it async.
+    planner.plan = AsyncMock(
         return_value=QueryPlan(
             intent=Intent.DESCRIPTIVE,
             fields=(Field.SUMMARY,),

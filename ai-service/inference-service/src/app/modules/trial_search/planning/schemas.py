@@ -14,13 +14,18 @@ class Field(StrEnum):
 class Intent(StrEnum):
     PATIENT = "patient"
     DESCRIPTIVE = "descriptive"
-    # COMPETITIVE_INTEL = "competitive_intel"   # add when you build that
+    # Analyst/competitor intent — "what is sponsor X doing", landscape questions. The
+    # LLM planner classifies these; the rule-based planner never emits it.
+    COMPETITIVE_INTEL = "competitive_intel"
 
 
 # Single source of truth: which fields to search per intent.
 INTENT_TO_FIELDS: dict[Intent, tuple[Field, ...]] = {
     Intent.PATIENT:     (Field.ELIGIBILITY, Field.SUMMARY),
     Intent.DESCRIPTIVE: (Field.SUMMARY, Field.TITLE, Field.INTERVENTION),
+    # Landscape questions read like descriptive search over the same fields; the
+    # distinguishing power is in the structured filters (sponsor/phase/status).
+    Intent.COMPETITIVE_INTEL: (Field.SUMMARY, Field.TITLE, Field.INTERVENTION),
 }
 
 

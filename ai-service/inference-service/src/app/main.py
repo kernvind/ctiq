@@ -10,7 +10,7 @@ from src.app.core.config import get_settings
 from src.app.core.set_logger import configure_logging
 from src.app.infra.embed.embedder import Embedder
 from src.app.infra.postgres.session import create_engine, create_session_factory
-from src.app.modules.trial_search.planning.rule_based_planner import RuleBasedQueryPlanner
+from src.app.modules.trial_search.planning.planner_factory import build_query_planner
 
 settings = get_settings()
 configure_logging(settings)
@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     engine = create_engine(settings.pg_database_url)
     app.state.db_engine = engine
     app.state.db_sessionmaker = create_session_factory(engine)
-    app.state.query_planner = RuleBasedQueryPlanner()
+    app.state.query_planner = build_query_planner(settings)
 
     yield
     # ── Shutdown ──────────────────────────────────────────────────────────────
