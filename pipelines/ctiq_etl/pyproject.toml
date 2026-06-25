@@ -27,6 +27,8 @@ dependencies = [
     # Data validation
     "pydantic>=2.8.0",
     "pydantic-settings>=2.4.0",
+    # LLM structured-output extraction (Stage A eligibility split — ROADMAP step 3)
+    "openai>=1.50.0",
     # Utilities
     "python-dateutil>=2.9.0",
     "python-dotenv>=1.0.0",

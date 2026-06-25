@@ -97,10 +97,13 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
 *only* in this blob today.
 
 - **New model `trial_eligibility_criteria`**: `nct_id`, `criterion_type`
-  [`inclusion`/`exclusion`], `text` (verbatim item), `category` (taxonomy below),
-  `predicate` JSONB (nullable, normalized — Stage B), `confidence` float, `source_hash`
-  (skip re-extract when the blob is unchanged), `display_order`. Alembic migration, lives
-  in `trials` schema, keyed on `nct_id` (no cross-ORM FK).
+  [`inclusion`/`exclusion`], `text` (verbatim atomic assertion), `category` (taxonomy
+  below), `subtype` (free text — names the `other` bucket and adds detail elsewhere),
+  `predicate` JSONB (nullable, normalized — Stage B), `confidence` float, `is_actionable`
+  bool (false = boilerplate like "other criteria apply"), `source_bullet_index` int (which
+  source bullet this assertion came from — bullets are compound, see refinement #1),
+  `source_hash` (skip re-extract when the blob is unchanged), `display_order`. Alembic
+  migration, lives in `trials` schema, keyed on `nct_id` (no cross-ORM FK).
 
 - **Category taxonomy** (the make-or-break design call — what makes criteria matchable).
   ~11 categories that recur across CT.gov eligibility prose; the user's targets map onto it:
@@ -113,6 +116,7 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
   | `performance_status` | ECOG / Karnofsky | **ECOG** |
   | `demographic` | age, sex (maps to existing structured cols) | age |
   | `lab_value` | hematologic/hepatic/renal thresholds ("ANC ≥1500") | — |
+  | `disease_assessment` | measurable/evaluable disease ("measurable per RECIST v1.1") | — |
   | `comorbidity` | concurrent conditions ("no symptomatic brain mets") | — |
   | `concomitant_med` | meds required/prohibited | — |
   | `reproductive` | pregnancy / contraception | — |
@@ -127,11 +131,13 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
     matching ("trials whose *biomarker inclusion* mentions EGFR") and the explanation UI.
   - **Stage B — normalize `predicate`, category-by-category, highest-structure first.**
     Only the enumerable categories get a predicate; leave prose-y ones as text+category.
-    Predicate shapes:
-    - `biomarker`: `{gene, alteration, relation: required|excluded}` — e.g. `{"gene":"EGFR","alteration":"exon19del|L858R","relation":"required"}`
+    Predicate shapes (the biomarker one is deliberately rich — see refinement #2):
+    - `biomarker`: `{marker, op?, value?, unit?, qualifier?: "sensitizing"|"activating", relation: required|excluded, unknown_status?: eligible|excluded, assay?}`
+      — e.g. PD-L1 inclusion `{"marker":"PD-L1","op":">=","value":1,"unit":"%TC","relation":"required","assay":"VENTANA SP263"}`;
+      EGFR exclusion `{"marker":["EGFR","ALK","ROS1"],"qualifier":"sensitizing","relation":"excluded","unknown_status":"excluded"}`
     - `performance_status`: `{scale:"ECOG", min:0, max:1}`
-    - `disease_stage`: `{stage:["IV"], modifiers:["metastatic"]}`
-    - `prior_therapy`: `{therapy_class:"EGFR TKI", relation:"prohibited|required|max_lines", value:2}`
+    - `disease_stage`: `{stage:["IV"], modifiers:["recurrent","metastatic"]}`
+    - `prior_therapy`: `{therapy_class:"checkpoint inhibitor", relation:"prohibited"|"required"|"max_lines", value?:2}`
     - `demographic`: `{min:18, unit:"years"}` (reconcile with existing `min_age_years`)
     - `lab_value`: `{analyte:"ANC", op:">=", value:1500, unit:"/uL"}`
 
@@ -141,6 +147,20 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
   `source_hash` so re-ingest only re-extracts changed blobs; skip trials with no
   eligibility text; batch the backfill. This is the "new LLM ETL dependency at backfill
   scale" — at 590k trials it's a real one-time cost, hence the caching.
+
+- **Validated against real prose** ([NCT06561386](https://clinicaltrials.gov/study/NCT06561386),
+  Phase 3 NSCLC) — the taxonomy held; four refinements came out of the dry run:
+  1. **Bullets are compound — the unit is the atomic assertion, not the bullet.** One
+     inclusion bullet = diagnosis + stage + prior_therapy (three rows). The prompt must
+     split *within* a bullet; `source_bullet_index` traces each row back.
+  2. **Biomarker predicate must carry threshold + qualifier + assay + unknown-status
+     handling** — and unknown-status flips per trial (one trial excludes unknown EGFR,
+     another keeps unknown BRAF eligible). A flat `required/excluded` enum loses the nuance
+     that decides the match. Hence the rich shape above.
+  3. **`disease_assessment` was a missing category** ("measurable disease per RECIST" is
+     ubiquitous); rare edges like "life expectancy ≥3 months" go to `other` + `subtype`.
+  4. **Boilerplate must be dropped** ("Other protocol-defined criteria apply") — the
+     `is_actionable` flag + low `confidence` handle it on trial #1.
 
 - **Re-embed per-item** — add `field_type="eligibility_item"` so the one-chunk limitation
   is fixed; route `Intent.PATIENT` to the item-level field. Materially better matching.

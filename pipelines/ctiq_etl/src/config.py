@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     # Bounds the in-memory chunk list (~5 chunks/trial × 200 = 1 000 chunks at a time).
     embedding_trial_batch_size: int = 200
 
+    # ── Structured eligibility extraction (Stage A, ROADMAP step 3) ───────────
+    # LLM splits eligibility_criteria into atomic, classified items. Extraction runs only
+    # when a key is set; without it the step is skipped (no items emitted). Gate
+    # re-extraction on the per-trial source_hash so the 590k-trial backfill is paid once.
+    openai_api_key: Optional[str] = None
+    eligibility_extract_model: str = "gpt-5-mini"
+
     @property
     def bq_full_table_id(self) -> str:
         return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_staging_table}"

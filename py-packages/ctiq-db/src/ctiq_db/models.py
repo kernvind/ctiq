@@ -125,6 +125,9 @@ class ClinicalTrial(Base):
     officials: Mapped[list["TrialOfficial"]] = relationship(
         back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
     )
+    eligibility_criteria_items: Mapped[list["TrialEligibilityCriterion"]] = relationship(
+        back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
+    )
     embeddings: Mapped[list["TrialEmbedding"]] = relationship(
         back_populates="trial", cascade="all, delete-orphan", passive_deletes=True
     )
@@ -235,6 +238,54 @@ class TrialOfficial(Base):
     last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
 
     trial: Mapped["ClinicalTrial"] = relationship(back_populates="officials")
+
+
+class TrialEligibilityCriterion(Base):
+    """One atomic eligibility assertion, extracted from the trial's free-text
+    `eligibility_criteria` blob (Asset 1 — structured eligibility; see docs/ROADMAP.md
+    step 3).
+
+    The unit is an *atomic assertion*, not a source bullet: a single CT.gov bullet often
+    bundles several (diagnosis + stage + prior-therapy), so one bullet can yield several
+    rows — `source_bullet_index` traces each back. Stage A populates text + category +
+    classification; `predicate` (Stage B) is the normalized, machine-comparable form and
+    is filled in later, category by category, so it stays nullable.
+    """
+
+    __tablename__ = "trial_eligibility_criteria"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    nct_id: Mapped[str] = mapped_column(
+        ForeignKey(_TRIAL_FK, ondelete="CASCADE"), nullable=False, index=True
+    )
+    # "inclusion" | "exclusion".
+    criterion_type: Mapped[str] = mapped_column(String, nullable=False)
+    # Verbatim text of the single assertion.
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Taxonomy bucket: diagnosis / disease_stage / biomarker / prior_therapy /
+    # performance_status / demographic / lab_value / disease_assessment / comorbidity /
+    # concomitant_med / reproductive / consent_logistics / other.
+    category: Mapped[Optional[str]] = mapped_column(String)
+    # Free-text refinement — names the `other` bucket, or adds detail within a category.
+    subtype: Mapped[Optional[str]] = mapped_column(String)
+    # Normalized, machine-comparable form (Stage B). Null until normalized for this category.
+    predicate: Mapped[Optional[dict]] = mapped_column(JSONB)
+    # Extractor self-reported confidence in [0, 1]; low values feed the "uncertain" bucket.
+    confidence: Mapped[Optional[float]] = mapped_column(Float)
+    # False for boilerplate ("Other protocol-defined criteria apply") — never a real filter.
+    is_actionable: Mapped[Optional[bool]] = mapped_column(Boolean)
+    # Index of the source bullet this assertion was split from (compound-bullet trace).
+    source_bullet_index: Mapped[Optional[int]] = mapped_column(Integer)
+    # SHA-256 of the source eligibility blob — skip re-extraction when it's unchanged.
+    source_hash: Mapped[Optional[str]] = mapped_column(String)
+    # Stable ordering for display (mirrors source order).
+    display_order: Mapped[Optional[int]] = mapped_column(Integer)
+    ingestion_date: Mapped[date] = mapped_column(Date, nullable=False)
+    last_update_post_date: Mapped[Optional[date]] = mapped_column(Date)
+
+    trial: Mapped["ClinicalTrial"] = relationship(
+        back_populates="eligibility_criteria_items"
+    )
 
 
 class TrialEmbedding(Base):
