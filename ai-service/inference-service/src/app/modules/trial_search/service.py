@@ -33,16 +33,22 @@ class TrialSearchService:
         # 1. Plan: decide what to search and how (async — the planner may call an LLM)
         plan: QueryPlan = await self.query_planner.plan(query=query)
         logger.info(
-            "Query plan: intent=%s, fields=%s, phase_filter=%s, top_k=%d",
+            "Query plan: intent=%s, fields=%s, phase_filter=%s, status_filter=%s, "
+            "sponsor_filter=%s, condition_filter=%s, top_k=%d",
             plan.intent.value,
             [f.value for f in plan.fields],
             list(plan.phase_filter) if plan.phase_filter else None,
+            list(plan.status_filter) if plan.status_filter else None,
+            plan.sponsor_filter,
+            list(plan.condition_filter) if plan.condition_filter else None,
             plan.top_k,
         )
 
-        # 2. Embed the query
-        embedding = self.embedder.embed_query(query)
-        logger.debug("Embedded query: dim=%d", len(embedding))
+        # 2. Embed the filter-stripped semantic core when the planner provides one, so
+        # filter words ("phase 3", "Pfizer") don't pollute the vector match; else the raw query.
+        text_to_embed = plan.semantic_query or query
+        embedding = self.embedder.embed_query(text_to_embed)
+        logger.debug("Embedded query=%r: dim=%d", text_to_embed, len(embedding))
 
         # 3. Vector search with structured pre-filters
         results = await self.repository.vector_search(
@@ -50,6 +56,9 @@ class TrialSearchService:
             fields=plan.fields,                # tuple — repo should accept Sequence
             top_k=plan.top_k,
             phase_filter=plan.phase_filter,
+            statuses=plan.status_filter,
+            sponsor=plan.sponsor_filter,
+            conditions=plan.condition_filter,
         )
         logger.info(
             "Search complete: query=%r, results=%d",

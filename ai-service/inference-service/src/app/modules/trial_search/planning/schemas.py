@@ -78,9 +78,33 @@ PHASE_PATTERNS_SORTED: list[tuple[str, tuple[str, ...]]] = sorted(
 )
 
 
+# CT.gov recruitment-status enums the LLM is told to emit. Used to validate/canonicalize
+# the model's `statuses` before they hit the SQL filter — unknown values are dropped.
+VALID_STATUSES: frozenset[str] = frozenset(
+    {
+        "RECRUITING",
+        "NOT_YET_RECRUITING",
+        "ENROLLING_BY_INVITATION",
+        "ACTIVE_NOT_RECRUITING",
+        "COMPLETED",
+        "TERMINATED",
+        "WITHDRAWN",
+        "SUSPENDED",
+    }
+)
+
+
 @dataclass(frozen=True)
 class QueryPlan:
     intent: Intent
     fields: tuple[Field, ...]
     phase_filter: Optional[tuple[str, ...]] = None
     top_k: int = 20
+    # Slice 3 structured pre-filters. None = no filter on that dimension. Only the LLM
+    # planner populates these; the rule-based planner leaves them None.
+    status_filter: Optional[tuple[str, ...]] = None
+    sponsor_filter: Optional[str] = None
+    condition_filter: Optional[tuple[str, ...]] = None
+    # The filter-stripped conceptual core to embed for vector search. None = embed the raw
+    # query (rule-based planner, or LLM returning an empty core).
+    semantic_query: Optional[str] = None

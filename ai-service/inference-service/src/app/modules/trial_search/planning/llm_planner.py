@@ -6,6 +6,7 @@ from openai import AsyncOpenAI
 from src.app.modules.trial_search.planning.llm_schemas import CompiledQuery
 from src.app.modules.trial_search.planning.schemas import (
     INTENT_TO_FIELDS,
+    VALID_STATUSES,
     Intent,
     QueryPlan,
 )
@@ -59,6 +60,27 @@ def _normalize_phases(phases: list[str]) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _normalize_statuses(statuses: list[str]) -> tuple[str, ...]:
+    """Upper-case and validate the model's status strings against the CT.gov enum set;
+    drop anything unrecognized so a hallucinated status can't silently empty the result."""
+    out: list[str] = []
+    for raw in statuses:
+        token = raw.strip().upper().replace(" ", "_").replace("-", "_")
+        if token in VALID_STATUSES and token not in out:
+            out.append(token)
+    return tuple(out)
+
+
+def _clean_conditions(conditions: list[str]) -> tuple[str, ...]:
+    """Trim and dedupe condition terms; drop blanks. Matched fuzzily (ILIKE) downstream."""
+    out: list[str] = []
+    for raw in conditions:
+        term = raw.strip()
+        if term and term not in out:
+            out.append(term)
+    return tuple(out)
+
+
 class LLMQueryPlanner:
     """NL->structured-query planner backed by an LLM (OpenAI structured outputs).
 
@@ -102,13 +124,25 @@ class LLMQueryPlanner:
 
         try:
             intent = Intent(compiled.intent)
+            logger.info("LLM planner: compiled query; %s ", compiled.__str__())
         except ValueError:
             intent = Intent.DESCRIPTIVE
-
+            logger.warning("LLM planner: invalid intent; falling back to DESCRIPTIVE")
         phase_filter = _normalize_phases(compiled.phases) or None
+        status_filter = _normalize_statuses(compiled.statuses) or None
+        condition_filter = _clean_conditions(compiled.conditions) or None
+        sponsor = compiled.sponsor.strip() if compiled.sponsor else None
+        sponsor_filter = sponsor or None
+        # Embed the filter-stripped core, but never an empty string — fall back to the raw
+        # query when the model strips everything (e.g. "phase 3 recruiting Pfizer").
+        semantic_query = compiled.semantic_query.strip() or None
         return QueryPlan(
             intent=intent,
             fields=INTENT_TO_FIELDS[intent],
             phase_filter=phase_filter,
             top_k=_DEFAULT_TOP_K,
+            status_filter=status_filter,
+            sponsor_filter=sponsor_filter,
+            condition_filter=condition_filter,
+            semantic_query=semantic_query,
         )

@@ -90,3 +90,56 @@ def test_refusal_falls_back_to_descriptive():
 
     assert plan.intent is Intent.DESCRIPTIVE
     assert plan.phase_filter is None
+    # The fallback plan carries no structured filters.
+    assert plan.status_filter is None
+    assert plan.sponsor_filter is None
+    assert plan.condition_filter is None
+
+
+def test_normalizes_and_dedupes_status_strings():
+    planner, _ = _planner_with(
+        _compiled(statuses=["Recruiting", "not yet recruiting", "bogus", "RECRUITING"])
+    )
+
+    plan = asyncio.run(planner.plan("..."))
+
+    assert plan.status_filter == ("RECRUITING", "NOT_YET_RECRUITING")
+
+
+def test_empty_statuses_means_no_filter():
+    planner, _ = _planner_with(_compiled(statuses=[]))
+
+    assert asyncio.run(planner.plan("...")).status_filter is None
+
+
+def test_sponsor_passes_through_trimmed():
+    planner, _ = _planner_with(_compiled(sponsor="  Pfizer  "))
+
+    assert asyncio.run(planner.plan("...")).sponsor_filter == "Pfizer"
+
+
+def test_blank_sponsor_becomes_none():
+    planner, _ = _planner_with(_compiled(sponsor="   "))
+
+    assert asyncio.run(planner.plan("...")).sponsor_filter is None
+
+
+def test_conditions_cleaned_and_deduped():
+    planner, _ = _planner_with(
+        _compiled(conditions=["melanoma", " melanoma ", "", "lung cancer"])
+    )
+
+    assert asyncio.run(planner.plan("...")).condition_filter == ("melanoma", "lung cancer")
+
+
+def test_semantic_query_passed_through():
+    planner, _ = _planner_with(_compiled(semantic_query="GLP-1 obesity"))
+
+    assert asyncio.run(planner.plan("...")).semantic_query == "GLP-1 obesity"
+
+
+def test_empty_semantic_query_becomes_none():
+    # When the model strips everything into filters, the core is empty -> embed raw query.
+    planner, _ = _planner_with(_compiled(semantic_query="   "))
+
+    assert asyncio.run(planner.plan("...")).semantic_query is None

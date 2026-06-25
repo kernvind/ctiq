@@ -80,7 +80,7 @@ async def _setup(url: str):
             [
                 ClinicalTrial(
                     nct_id="NCT-A", brief_title="Trial A", overall_status="RECRUITING",
-                    phases=["PHASE2"], conditions=[], lead_sponsor_name="Sponsor A",
+                    phases=["PHASE2"], conditions=["Melanoma"], lead_sponsor_name="Sponsor A",
                     lead_sponsor_class="INDUSTRY", ingestion_date=INGEST_DATE, ingested_at=INGESTED_AT,
                     official_title="Official Trial A", detailed_description="Long description",
                     eligibility_criteria="Inclusion: adults", study_type="INTERVENTIONAL",
@@ -92,12 +92,12 @@ async def _setup(url: str):
                 ),
                 ClinicalTrial(
                     nct_id="NCT-B", brief_title="Trial B", overall_status="RECRUITING",
-                    phases=["PHASE3"], conditions=[], lead_sponsor_name="Sponsor B",
+                    phases=["PHASE3"], conditions=["Malignant Melanoma"], lead_sponsor_name="Sponsor B",
                     lead_sponsor_class="INDUSTRY", ingestion_date=INGEST_DATE, ingested_at=INGESTED_AT,
                 ),
                 ClinicalTrial(
-                    nct_id="NCT-C", brief_title="Trial C", overall_status="RECRUITING",
-                    phases=["PHASE1"], conditions=[], lead_sponsor_name="Sponsor C",
+                    nct_id="NCT-C", brief_title="Trial C", overall_status="COMPLETED",
+                    phases=["PHASE1"], conditions=["Lung Cancer"], lead_sponsor_name="Sponsor C",
                     lead_sponsor_class="OTHER", ingestion_date=INGEST_DATE, ingested_at=INGESTED_AT,
                 ),
             ]
@@ -195,6 +195,54 @@ def test_phase_filter_restricts_to_matching_trials(repo):
         phase_filter=("PHASE3",),
     )
     assert [r.nct_id for r in rows] == ["NCT-B"]
+
+
+def test_status_filter_restricts_to_matching_trials(repo):
+    rows = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        statuses=("RECRUITING",),
+    )
+    # NCT-C is COMPLETED, so it's excluded; A then B by distance.
+    assert [r.nct_id for r in rows] == ["NCT-A", "NCT-B"]
+
+    completed = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        statuses=("COMPLETED",),
+    )
+    assert [r.nct_id for r in completed] == ["NCT-C"]
+
+
+def test_sponsor_filter_is_fuzzy_and_case_insensitive(repo):
+    # Exact-ish term narrows to one sponsor.
+    one = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        sponsor="Sponsor B",
+    )
+    assert [r.nct_id for r in one] == ["NCT-B"]
+
+    # Lower-case substring matches every "Sponsor ..." (ILIKE).
+    many = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        sponsor="sponsor",
+    )
+    assert {r.nct_id for r in many} == {"NCT-A", "NCT-B", "NCT-C"}
+
+
+def test_condition_filter_matches_family_substring(repo):
+    # "melanoma" matches both "Melanoma" and "Malignant Melanoma", not "Lung Cancer".
+    rows = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        conditions=("melanoma",),
+    )
+    assert {r.nct_id for r in rows} == {"NCT-A", "NCT-B"}
+
+
+def test_condition_filter_ors_multiple_terms(repo):
+    rows = _run_repo(
+        repo, "vector_search", embedding=QUERY, fields=[Field.SUMMARY], top_k=10,
+        conditions=("melanoma", "lung cancer"),
+    )
+    assert {r.nct_id for r in rows} == {"NCT-A", "NCT-B", "NCT-C"}
 
 
 def test_field_filter_restricts_to_field_type(repo):

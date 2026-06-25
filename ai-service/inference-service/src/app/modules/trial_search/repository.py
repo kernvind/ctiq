@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -25,6 +25,16 @@ _OUTCOME_ORDER: dict[str, int] = {"PRIMARY": 0, "SECONDARY": 1}
 _SAMPLE_FACILITIES = 5
 
 
+def _ilike_contains(term: str) -> str:
+    """Escape LIKE wildcards in a user/LLM-supplied term and wrap for substring match.
+
+    Pair with ``.ilike(pattern, escape="\\")``. Without escaping, a term containing % or _
+    would silently widen the match.
+    """
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def _facility_sort_key(loc: TrialLocation) -> tuple:
     # Recruiting sites first, then alphabetical — same intent as the old SQL.
     return (0 if loc.status == "RECRUITING" else 1, loc.country or "", loc.facility or "")
@@ -44,6 +54,8 @@ class TrialSearchRepository:
         top_k: int,
         phase_filter: Optional[tuple[str, ...]] = None,
         statuses: Optional[tuple[str, ...]] = None,
+        sponsor: Optional[str] = None,
+        conditions: Optional[tuple[str, ...]] = None,
     ) -> list[TrialSearchResultRow]:
         if not embedding:
             raise ValueError("vector_search requires a non-empty embedding")
@@ -70,6 +82,20 @@ class TrialSearchRepository:
         if phase_filter:
             # array overlap (&&): the trial's phases intersect the requested phases.
             stmt = stmt.where(ClinicalTrial.phases.op("&&")(list(phase_filter)))
+        if sponsor:
+            # Fuzzy substring on the free-text lead sponsor: "Pfizer" matches "Pfizer Inc.".
+            # Coarse until sponsor entity-resolution lands (roadmap Asset 3).
+            stmt = stmt.where(
+                ClinicalTrial.lead_sponsor_name.ilike(_ilike_contains(sponsor), escape="\\")
+            )
+        if conditions:
+            # OR across requested terms; substring-match each against the trial's condition
+            # array (joined to one string). Coarse until MeSH family expansion lands
+            # (roadmap step 5) — "melanoma" matches "Malignant Melanoma", "Uveal Melanoma".
+            joined = func.array_to_string(ClinicalTrial.conditions, " || ")
+            stmt = stmt.where(
+                or_(*(joined.ilike(_ilike_contains(c), escape="\\") for c in conditions))
+            )
         stmt = stmt.order_by(distance).limit(oversample_k)
 
         matched = (await self.session.execute(stmt)).all()

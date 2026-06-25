@@ -54,6 +54,41 @@ def test_valid_query_plans_embeds_then_searches_with_plan_params():
     assert result == []
 
 
+def test_forwards_structured_filters_and_embeds_semantic_query():
+    service, repo, embedder, planner = make_service(rows=[])
+    planner.plan = AsyncMock(
+        return_value=QueryPlan(
+            intent=Intent.COMPETITIVE_INTEL,
+            fields=(Field.SUMMARY,),
+            phase_filter=("PHASE3",),
+            status_filter=("RECRUITING",),
+            sponsor_filter="Pfizer",
+            condition_filter=("melanoma",),
+            semantic_query="melanoma immunotherapy",
+            top_k=20,
+        )
+    )
+
+    asyncio.run(service.search_trials("recruiting phase 3 pfizer melanoma trials"))
+
+    # The filter-stripped core is embedded, not the raw query.
+    embedder.embed_query.assert_called_once_with("melanoma immunotherapy")
+    kwargs = repo.vector_search.call_args.kwargs
+    assert kwargs["statuses"] == ("RECRUITING",)
+    assert kwargs["sponsor"] == "Pfizer"
+    assert kwargs["conditions"] == ("melanoma",)
+    assert kwargs["phase_filter"] == ("PHASE3",)
+
+
+def test_embeds_raw_query_when_no_semantic_query():
+    service, repo, embedder, planner = make_service(rows=[])
+    # Plan with semantic_query=None (rule-based planner, or empty LLM core).
+
+    asyncio.run(service.search_trials("phase 3 melanoma"))
+
+    embedder.embed_query.assert_called_once_with("phase 3 melanoma")
+
+
 def test_get_trial_normalizes_id_and_delegates_to_repository():
     service, repo, _, _ = make_service()
     repo.get_trial = AsyncMock(return_value="sentinel")
