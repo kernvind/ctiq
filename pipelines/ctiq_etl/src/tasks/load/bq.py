@@ -1,10 +1,11 @@
 from __future__ import annotations
- 
+
 import logging
 from dataclasses import dataclass
 from datetime import date
 from typing import  Optional
- 
+
+import pyarrow as pa
 from google.cloud import bigquery
 from google.cloud.bigquery import (
     Client,
@@ -13,9 +14,71 @@ from google.cloud.bigquery import (
     WriteDisposition,
 )
 from src.schemas.tables import TableConfig
+from src.tasks.load.studies_to_parquet import SUBDIR_SCHEMAS
 from src.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Curated-table DDL from the parquet schemas (single source of truth) ──────
+
+def _arrow_scalar_to_bq(dtype: pa.DataType) -> str:
+    """Map a (non-list, non-struct) pyarrow type to a BigQuery scalar type name."""
+    if pa.types.is_string(dtype) or pa.types.is_large_string(dtype):
+        return "STRING"
+    if pa.types.is_boolean(dtype):
+        return "BOOL"
+    if pa.types.is_integer(dtype):
+        return "INT64"
+    if pa.types.is_floating(dtype):
+        return "FLOAT64"
+    if pa.types.is_date(dtype):
+        return "DATE"
+    if pa.types.is_timestamp(dtype):
+        return "TIMESTAMP"
+    raise ValueError(f"No BigQuery type mapping for pyarrow type: {dtype}")
+
+
+def _arrow_field_to_bq(field: pa.Field) -> bigquery.SchemaField:
+    """Convert one pyarrow field to a BigQuery SchemaField (recursing into list/struct).
+
+    list<T>        → mode REPEATED of T (a struct element becomes a REPEATED RECORD).
+    struct         → RECORD with nested fields.
+    nullable=False → mode REQUIRED (REPEATED takes precedence — BQ arrays can't be REQUIRED).
+    """
+    dtype = field.type
+    mode = "NULLABLE"
+    if pa.types.is_list(dtype) or pa.types.is_large_list(dtype):
+        mode = "REPEATED"
+        dtype = dtype.value_type
+    elif not field.nullable:
+        mode = "REQUIRED"
+
+    if pa.types.is_struct(dtype):
+        subfields = [_arrow_field_to_bq(dtype.field(i)) for i in range(dtype.num_fields)]
+        return bigquery.SchemaField(field.name, "RECORD", mode=mode, fields=subfields)
+    return bigquery.SchemaField(field.name, _arrow_scalar_to_bq(dtype), mode=mode)
+
+
+def _bq_schema_from_arrow(schema: pa.Schema) -> list[bigquery.SchemaField]:
+    return [_arrow_field_to_bq(schema.field(i)) for i in range(len(schema))]
+
+
+def ensure_curated_table(client: Client, table_id: str, gcs_subdir: str) -> None:
+    """Create the curated table if it's missing, with schema derived from its parquet
+    schema. Idempotent (`exists_ok=True`) and non-destructive — existing tables are left
+    exactly as-is (no schema/cluster changes). Clusters by nct_id when the table has it,
+    matching the replace-by-nct_id / merge-on-nct_id access pattern.
+    """
+    schema = SUBDIR_SCHEMAS.get(gcs_subdir)
+    if schema is None:
+        logger.warning("No parquet schema for subdir %r — skipping ensure_table", gcs_subdir)
+        return
+    table = bigquery.Table(table_id, schema=_bq_schema_from_arrow(schema))
+    if schema.get_field_index("nct_id") != -1:
+        table.clustering_fields = ["nct_id"]
+    client.create_table(table, exists_ok=True)
+    logger.info("Ensured curated table %s (subdir=%s)", table_id, gcs_subdir)
 
 
 
@@ -179,7 +242,12 @@ def load_batch_to_bigquery(
  
     for cfg in table_configs:
         curated = f"{project}.{dataset}.{cfg.curated_table}"
- 
+
+        # Create the curated table from its parquet schema if it doesn't exist yet
+        # (idempotent, non-destructive) — _merge_trial/_replace_children read its schema
+        # and never create it, so new tables would otherwise fail on first load.
+        ensure_curated_table(client, curated, cfg.gcs_subdir)
+
         try:
             staging = _load_to_staging(
                 client=client,

@@ -242,7 +242,16 @@ TABLE_SCHEMAS: dict[str, pa.Schema] = {
     "outcomes": OUTCOME_SCHEMA,
     "officials": OFFICIAL_SCHEMA,
 }
- 
+
+# Every curated table keyed by its TableConfig.gcs_subdir → the parquet schema that defines
+# it. Single source of truth: the parquet wire format and the BQ table schema can't drift,
+# because the BQ table is created from this (see bq.ensure_curated_table).
+SUBDIR_SCHEMAS: dict[str, pa.Schema] = {
+    **TABLE_SCHEMAS,
+    "embeddings": EMBEDDING_SCHEMA,
+    "eligibility_criteria": ELIGIBILITY_SCHEMA,
+}
+
 # Child tables that are 1-to-many off `trial`
 _CHILD_TABLES = ("locations", "mesh_terms", "arm_groups",
                 "interventions", "outcomes", "officials")

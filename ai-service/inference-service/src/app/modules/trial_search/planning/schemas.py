@@ -6,7 +6,13 @@ from typing import Optional
 class Field(StrEnum):
     TITLE = "title"
     SUMMARY = "summary"
-    ELIGIBILITY = "eligibility"
+    # Per-criterion eligibility embeddings (Stage A). Split by criterion type so the
+    # planner can match patient queries against INCLUSION only — semantic similarity is
+    # sign-blind, so matching against exclusions ("EGFR mutations are excluded") would
+    # falsely surface trials a patient is disqualified from. Replaces the old single
+    # averaged "eligibility" chunk.
+    ELIGIBILITY_INCLUSION = "eligibility_inclusion"
+    ELIGIBILITY_EXCLUSION = "eligibility_exclusion"
     OUTCOME = "outcome"
     INTERVENTION = "intervention"
 
@@ -21,7 +27,9 @@ class Intent(StrEnum):
 
 # Single source of truth: which fields to search per intent.
 INTENT_TO_FIELDS: dict[Intent, tuple[Field, ...]] = {
-    Intent.PATIENT:     (Field.ELIGIBILITY, Field.SUMMARY),
+    # INCLUSION only — see the Field comment. Exclusion vectors exist but aren't matched
+    # for positive ranking; they're reserved for the deterministic Stage B "excluded?" path.
+    Intent.PATIENT:     (Field.ELIGIBILITY_INCLUSION, Field.SUMMARY),
     Intent.DESCRIPTIVE: (Field.SUMMARY, Field.TITLE, Field.INTERVENTION),
     # Landscape questions read like descriptive search over the same fields; the
     # distinguishing power is in the structured filters (sponsor/phase/status).

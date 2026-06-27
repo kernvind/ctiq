@@ -47,7 +47,7 @@ class TestFields:
     def test_patient_intent_searches_eligibility_and_summary(self):
         plan = planner.plan("i have melanoma")
         assert plan.fields == INTENT_TO_FIELDS[Intent.PATIENT]
-        assert plan.fields == (Field.ELIGIBILITY, Field.SUMMARY)
+        assert plan.fields == (Field.ELIGIBILITY_INCLUSION, Field.SUMMARY)
 
     def test_descriptive_intent_searches_summary_title_intervention(self):
         plan = planner.plan("immunotherapy trials")

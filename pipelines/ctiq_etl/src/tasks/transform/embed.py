@@ -45,19 +45,6 @@ def _summary_text(trial: dict) -> Optional[str]:
     return "\n\n".join(parts) if parts else None
  
  
-def _eligibility_text(trial: dict) -> Optional[str]:
-    """
-    Raw eligibility criteria as a single chunk.
- 
-    v0 limitation: long eligibility text averaged into one vector hurts
-    matching quality. When you add the LLM splitter, replace this with a
-    function that returns list[str] of individual inclusion/exclusion items;
-    no other code in this module needs to change.
-    """
-    text = trial.get("eligibility_criteria")
-    return text or None
- 
- 
 def _outcome_text(outcome: dict) -> str:
     parts = []
     if outcome.get("measure"):
@@ -111,12 +98,11 @@ def extract_chunks(transformed: dict) -> list[EmbeddingChunk]:
  
     if (summary := _summary_text(trial)):
         chunks.append(EmbeddingChunk(nct_id, "summary", 0, summary))
- 
-    if (elig := _eligibility_text(trial)):
-        # When you add LLM splitting, replace this single-chunk block with a
-        # loop over the split items, each as its own chunk_id.
-        chunks.append(EmbeddingChunk(nct_id, "eligibility", 0, elig))
- 
+
+    # Per-item eligibility chunks are NOT built here — they come from the Stage A
+    # extractor's classified items (eligibility_item_chunks), so the split has a single
+    # source of truth. They're merged into the batch in embed_trials.
+
     for i, outcome in enumerate(transformed.get("outcomes") or []):
         text = _outcome_text(outcome)
         if text:
@@ -128,6 +114,38 @@ def extract_chunks(transformed: dict) -> list[EmbeddingChunk]:
             chunks.append(EmbeddingChunk(nct_id, "intervention", i, text))
  
     return chunks
+
+
+# Field types for the two per-criterion eligibility embeddings. Must match the inference
+# planner's Field enum values (eligibility_inclusion / eligibility_exclusion).
+_ELIGIBILITY_FIELD_TYPE = {
+    "inclusion": "eligibility_inclusion",
+    "exclusion": "eligibility_exclusion",
+}
+
+
+def eligibility_item_chunks(eligibility_rows: list[dict]) -> list[EmbeddingChunk]:
+    """Build per-item eligibility embedding chunks from Stage A criterion rows.
+
+    Inclusion/exclusion → distinct field_type (so the planner can match inclusion only).
+    `chunk_id` = the criterion's `display_order`, so a matched embedding joins straight back
+    to its `trial_eligibility_criteria` row (category/predicate/confidence) for explanation.
+    Boilerplate (`is_actionable` False) is not embedded.
+    """
+    chunks: list[EmbeddingChunk] = []
+    for row in eligibility_rows:
+        if not row.get("is_actionable"):
+            continue
+        text = (row.get("text") or "").strip()
+        criterion_type = row.get("criterion_type")
+        if not isinstance(criterion_type, str):
+            continue
+        field_type = _ELIGIBILITY_FIELD_TYPE.get(criterion_type)
+        if not text or field_type is None:
+            continue
+        chunks.append(EmbeddingChunk(row["nct_id"], field_type, row["display_order"], text))
+    return chunks
+
 
 # ─── Embedder ────────────────────────────────────────────────────────────────
 
@@ -218,8 +236,14 @@ class TrialEmbedder:
         batch_size: int = settings.embedding_batch_size,
         show_progress: bool = False,
         skip_existing_check: bool = False,
+        eligibility_rows: Optional[list[dict]] = None,
     ) -> list[dict]:
-        """Convenience: extract chunks from each study and embed them all."""
+        """Convenience: extract chunks from each study and embed them all.
+
+        `eligibility_rows` (Stage A criterion rows) are turned into per-item eligibility
+        chunks and embedded in the SAME batch as the trial's other chunks — so all of a
+        trial's vectors are written by one replace-by-nct_id upsert and nothing clobbers.
+        """
         all_chunks: list[EmbeddingChunk] = []
         nct_ids = set()
         batch_size =  self._default_batch_size or batch_size
@@ -228,6 +252,10 @@ class TrialEmbedder:
                 continue
             nct_ids.add(transformed.get("trial", {}).get("nct_id", ""))
             all_chunks.extend(extract_chunks(transformed))
+
+        if eligibility_rows:
+            all_chunks.extend(eligibility_item_chunks(eligibility_rows))
+            nct_ids.update(row["nct_id"] for row in eligibility_rows)
 
         if skip_existing_check:
             to_embed = all_chunks

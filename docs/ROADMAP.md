@@ -181,9 +181,22 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
     GCS (`upload_eligibility_batch`) → BQ (`ELIGIBILITY_TABLE_CONFIG`, replace-by-nct_id) →
     Postgres (`upsert_eligibility_criteria`); flow gains a per-trial extraction loop +
     `--skip-eligibility` (auto-skips with no OpenAI key).
-  - ⏳ **Remaining for Stage A:** per-item embeddings (`field_type="eligibility_item"` in
-    `embed.py`, route `Intent.PATIENT`), run migration `0005` + set ETL `OPENAI_API_KEY`,
-    `poetry install` for the new `openai` dep, and a real backfill.
+  - ✅ **Per-item embeddings done.** Dropped the single averaged `eligibility` chunk; now
+    embed each Stage A item with `field_type` `eligibility_inclusion` / `eligibility_exclusion`
+    (boilerplate not embedded; `chunk_id = display_order` links the vector back to its
+    `trial_eligibility_criteria` row for explanation). Items are embedded from the extractor
+    output and merged into the trial's existing embeddings batch, so replace-by-nct_id stays
+    correct. Planner routes `Intent.PATIENT → (eligibility_inclusion, summary)` — **inclusion
+    only**, since cosine similarity is sign-blind and matching exclusions would falsely surface
+    disqualifying trials. Exclusion vectors are stored for the future Stage B "excluded?" path.
+  - ✅ **Curated BQ tables now auto-create.** `bq.ensure_curated_table` derives the BQ
+    schema from the parquet schema (`SUBDIR_SCHEMAS`, one source of truth) and runs
+    `create_table(exists_ok=True)` (clustered by nct_id) at the top of every load —
+    non-destructive to existing tables. The eligibility table needs no manual DDL.
+  - ⏳ **Remaining for Stage A:** run migration `0005`, set ETL `OPENAI_API_KEY`,
+    `poetry install` (new `openai` dep), then a **full re-embed backfill** — required to
+    drop stale `eligibility` chunks and populate the two new field types (replace-by-nct_id
+    only swaps a trial's vectors when it's re-embedded).
 
 **4. Surface change intelligence in landscapes (Asset 2 — turn data into a feature).**
 - Upgrade landscape monitoring from `lastSeenNctIds` (membership only) to **field-level

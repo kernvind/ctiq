@@ -51,7 +51,7 @@ def test_patient_intent_searches_eligibility():
     plan = asyncio.run(planner.plan("i have stage 3 melanoma, any trials?"))
 
     assert plan.intent is Intent.PATIENT
-    assert Field.ELIGIBILITY in plan.fields
+    assert Field.ELIGIBILITY_INCLUSION in plan.fields
 
 
 def test_competitive_intel_intent_is_activated():

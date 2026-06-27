@@ -120,8 +120,13 @@ def gcs_upload_embeddings_chunk_task(embeddings, run_id: str, chunk_idx: int, in
 def embeddings_chunk_task(
     transformed_studies: list[dict],
     skip_existing_check: bool = False,
+    eligibility_rows: Optional[list[dict]] = None,
 ) -> list[dict]:
-    return get_embedder().embed_trials(transformed_studies, skip_existing_check=skip_existing_check)
+    return get_embedder().embed_trials(
+        transformed_studies,
+        skip_existing_check=skip_existing_check,
+        eligibility_rows=eligibility_rows,
+    )
 
 
 @task(
@@ -323,17 +328,14 @@ def clinical_trials_etl_flow(
         uploaded = gcs_upload_trials_chunk_task(trials, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
         total_trials += uploaded
         pg_upsert_trials_task(trials, ingestion_date=ingested_at, ingested_at=ingested_at_dt)
-        if not skip_embeddings:
-            for sub_idx in range(0, len(trials), trial_batch_size):
-                sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
-                embeddings = embeddings_chunk_task(sub_batch, skip_existing_check=full_load or skip_existing_check)
-                gcs_upload_embeddings_chunk_task(embeddings, run_id=run_id, chunk_idx=embed_chunk_idx, ingested_at=ingested_at)
-                total_embedding_chunks += len(embeddings)
-                embed_chunk_idx += 1
-                pg_upsert_embeddings_task(embeddings)
-        if run_eligibility:
-            for sub_idx in range(0, len(trials), trial_batch_size):
-                sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
+        # One sub-batch loop: extract structured eligibility FIRST, then embed — the
+        # extracted items are fed into the same embeddings batch (per-item eligibility
+        # vectors ride with the trial's other chunks, so replace-by-nct_id stays correct).
+        for sub_idx in range(0, len(trials), trial_batch_size):
+            sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
+
+            eligibility_rows: list[dict] = []
+            if run_eligibility:
                 eligibility_rows = eligibility_extract_chunk_task(
                     sub_batch, ingestion_date=ingested_at,
                     skip_existing_check=full_load or skip_existing_check,
@@ -343,6 +345,17 @@ def clinical_trials_etl_flow(
                     total_eligibility_rows += len(eligibility_rows)
                     pg_upsert_eligibility_task(eligibility_rows)
                 elig_chunk_idx += 1
+
+            if not skip_embeddings:
+                embeddings = embeddings_chunk_task(
+                    sub_batch,
+                    skip_existing_check=full_load or skip_existing_check,
+                    eligibility_rows=eligibility_rows,
+                )
+                gcs_upload_embeddings_chunk_task(embeddings, run_id=run_id, chunk_idx=embed_chunk_idx, ingested_at=ingested_at)
+                total_embedding_chunks += len(embeddings)
+                embed_chunk_idx += 1
+                pg_upsert_embeddings_task(embeddings)
 
     if skip_embeddings:
         logger.info("Skipping embedding generation (--skip-embeddings)")
