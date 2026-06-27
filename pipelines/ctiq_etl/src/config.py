@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
 
     bq_embeddings_table: str = "clinical_trials_embeddings"
+    bq_eligibility_table: str = "clinical_trials_eligibility_criteria"
 
     # ── PostgreSQL (inference service read replica) ───────────────────────────
     # Set this to enable the Postgres sink alongside BigQuery.
@@ -40,7 +41,9 @@ class Settings(BaseSettings):
     gcs_prefix: str = "clinical_trials"
     # Embedding Parquet files land under this separate prefix
     gcs_embeddings_prefix: str = "clinical_trials_embeddings"
-    
+    # Structured-eligibility Parquet files land under this separate prefix
+    gcs_eligibility_prefix: str = "clinical_trials_eligibility_criteria"
+
     embedding_max_sequence_length: int = 8192
 
     # ── HuggingFace embeddings ────────────────────────────────────────────────
@@ -71,12 +74,20 @@ class Settings(BaseSettings):
         return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_embeddings_table}"
 
     @property
+    def bq_eligibility_table_id(self) -> str:
+        return f"{self.gcp_project_id}.{self.bq_dataset}.{self.bq_eligibility_table}"
+
+    @property
     def gcs_base_uri(self) -> str:
         return f"gs://{self.gcs_bucket}/{self.gcs_prefix}"
 
     @property
     def gcs_embeddings_uri(self) -> str:
         return f"gs://{self.gcs_bucket}/{self.gcs_embeddings_prefix}"
+
+    @property
+    def gcs_eligibility_uri(self) -> str:
+        return f"gs://{self.gcs_bucket}/{self.gcs_eligibility_prefix}"
 
 
 settings = Settings()

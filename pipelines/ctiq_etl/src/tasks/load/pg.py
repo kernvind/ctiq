@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ctiq_db.models import (
     ClinicalTrial,
     TrialArmGroup,
+    TrialEligibilityCriterion,
     TrialEmbedding,
     TrialIntervention,
     TrialLocation,
@@ -148,3 +149,41 @@ def upsert_embeddings(
         engine.dispose()
 
     return len(embeddings)
+
+
+def upsert_eligibility_criteria(
+    eligibility_rows: list[dict],
+    database_url: str,
+) -> int:
+    """Replace structured-eligibility rows for all affected nct_ids (child-table strategy).
+
+    Deletes existing criteria for nct_ids present in the batch, then inserts the new rows —
+    keeps the table consistent when a trial is re-extracted. Trials skipped by the
+    source_hash gate aren't in the batch, so their existing rows survive.
+
+    Returns the number of criterion rows processed.
+    """
+    if not eligibility_rows:
+        return 0
+
+    nct_ids = list({row["nct_id"] for row in eligibility_rows})
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                delete(TrialEligibilityCriterion).where(
+                    TrialEligibilityCriterion.nct_id.in_(nct_ids)
+                )
+            )
+            for batch in _batched(eligibility_rows, _BATCH_SIZE):
+                conn.execute(pg_insert(TrialEligibilityCriterion).values(batch))
+
+        logger.info(
+            "Postgres: replaced or inserted eligibility for %d nct_ids (%d rows)",
+            len(nct_ids), len(eligibility_rows),
+        )
+    finally:
+        engine.dispose()
+
+    return len(eligibility_rows)

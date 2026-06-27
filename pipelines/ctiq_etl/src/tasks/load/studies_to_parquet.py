@@ -216,6 +216,23 @@ EMBEDDING_SCHEMA = pa.schema([
     pa.field("ingested_at", pa.timestamp("us", tz="UTC"), nullable=False),
 ])
 
+# Structured eligibility (Stage A). `predicate` (Stage B, JSONB) is intentionally absent —
+# it's normalized later, per category, and stays null in the meantime.
+ELIGIBILITY_SCHEMA = pa.schema([
+    pa.field("nct_id", pa.string(), nullable=False),
+    pa.field("criterion_type", pa.string(), nullable=False),  # inclusion | exclusion
+    pa.field("text", pa.string(), nullable=False),
+    pa.field("category", pa.string()),
+    pa.field("subtype", pa.string()),
+    pa.field("confidence", pa.float64()),
+    pa.field("is_actionable", pa.bool_()),
+    pa.field("source_bullet_index", pa.int64()),
+    pa.field("source_hash", pa.string()),
+    pa.field("display_order", pa.int64()),
+    pa.field("ingestion_date", pa.date32(), nullable=False),
+    pa.field("last_update_post_date", pa.date32()),
+])
+
 TABLE_SCHEMAS: dict[str, pa.Schema] = {
     "trial": TRIAL_SCHEMA,
     "locations": LOCATION_SCHEMA,
@@ -278,4 +295,15 @@ def _embeddings_to_arrow_tables(
     """
     tables: dict[str, pa.Table] = {}
     tables['embeddings'] = pa.Table.from_pylist(embeddings, schema=EMBEDDING_SCHEMA)
+    return tables
+
+
+def _eligibility_to_arrow_tables(
+    eligibility_rows: list[dict],
+) -> dict[str, pa.Table]:
+    """Convert a batch of eligibility-criterion dicts (to_db_rows output) into a Table."""
+    tables: dict[str, pa.Table] = {}
+    tables["eligibility_criteria"] = pa.Table.from_pylist(
+        eligibility_rows, schema=ELIGIBILITY_SCHEMA
+    )
     return tables

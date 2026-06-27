@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import date
 from enum import Enum
-from typing import Literal, Optional
+from typing import Iterable, Literal, Optional
 
 from pydantic import BaseModel, Field
+
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +140,80 @@ class EligibilityExtractor:
             logger.warning("Eligibility extraction: model returned no parse")
             return []
         return parsed.criteria
+
+
+_extractor_instance: Optional["EligibilityExtractor"] = None
+
+
+def get_eligibility_extractor() -> Optional["EligibilityExtractor"]:
+    """Singleton extractor built from settings. Returns None when no OpenAI key is set —
+    callers skip extraction entirely in that case (mirrors the embeddings skip path)."""
+    global _extractor_instance
+    if not settings.openai_api_key:
+        return None
+    if _extractor_instance is None:
+        from openai import OpenAI
+
+        _extractor_instance = EligibilityExtractor(
+            OpenAI(api_key=settings.openai_api_key),
+            model=settings.eligibility_extract_model,
+        )
+    return _extractor_instance
+
+
+def extract_trials(
+    transformed_studies: Iterable[dict],
+    ingestion_date: date,
+    skip_existing_check: bool = False,
+) -> list[dict]:
+    """Extract structured eligibility for a batch of trials → trial_eligibility_criteria rows.
+
+    LLM cost is per-trial, so re-extraction is gated on the eligibility blob's `source_hash`:
+    trials whose text is unchanged since the last run are skipped (their existing rows are
+    left untouched by the replace-by-nct_id load). Pass skip_existing_check=True to force a
+    full re-extract (backfills / test runs). No-ops to [] when no extractor is configured.
+    """
+    extractor = get_eligibility_extractor()
+    if extractor is None:
+        logger.info("Eligibility extraction skipped: no OpenAI key configured")
+        return []
+
+    # Index trials by nct_id with their eligibility blob + precomputed hash.
+    pending: dict[str, tuple[str, str]] = {}  # nct_id -> (text, source_hash)
+    for transformed in transformed_studies:
+        if not transformed:
+            continue
+        trial = transformed.get("trial", {})
+        nct_id = trial.get("nct_id")
+        text = (trial.get("eligibility_criteria") or "").strip()
+        if not nct_id or not text:
+            continue
+        pending[nct_id] = (text, eligibility_source_hash(text))
+
+    if not pending:
+        return []
+
+    if not skip_existing_check:
+        from src.tasks.load.bq import get_existing_eligibility_hash
+
+        existing = get_existing_eligibility_hash(nct_ids=list(pending))
+        for nct_id, (_, source_hash) in list(pending.items()):
+            if existing.get(nct_id) == source_hash:
+                logger.info("Skipping eligibility for %s (unchanged since last run)", nct_id)
+                del pending[nct_id]
+
+    rows: list[dict] = []
+    for nct_id, (text, source_hash) in pending.items():
+        items = extractor.extract(text)
+        if not items:
+            continue
+        rows.extend(
+            to_db_rows(nct_id, items, source_hash=source_hash, ingestion_date=ingestion_date)
+        )
+    logger.info(
+        "Eligibility extraction: %d trials → %d criterion rows", len(pending), len(rows)
+    )
+    return rows
 
 
 def to_db_rows(

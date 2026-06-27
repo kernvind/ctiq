@@ -172,6 +172,19 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
 - *New model + new embedding field_type + new LLM ETL dependency. The real moat — Stage A
   is the flagship deliverable; Stage B is incremental depth, not a prerequisite to ship.*
 
+- **Progress (2026-06-24):**
+  - ✅ Model `trial_eligibility_criteria` + migration `0005`; exported from `ctiq_db`.
+  - ✅ Extractor (`pipelines/ctiq_etl/.../transform/eligibility_extract.py`): Pydantic
+    `ExtractedCriterion`/`ExtractedEligibility`, `EligibilityExtractor` (OpenAI
+    `responses.parse`), `extract_trials` enrichment with `source_hash` re-extract gating.
+  - ✅ **Load path wired** end-to-end mirroring embeddings: parquet `ELIGIBILITY_SCHEMA` →
+    GCS (`upload_eligibility_batch`) → BQ (`ELIGIBILITY_TABLE_CONFIG`, replace-by-nct_id) →
+    Postgres (`upsert_eligibility_criteria`); flow gains a per-trial extraction loop +
+    `--skip-eligibility` (auto-skips with no OpenAI key).
+  - ⏳ **Remaining for Stage A:** per-item embeddings (`field_type="eligibility_item"` in
+    `embed.py`, route `Intent.PATIENT`), run migration `0005` + set ETL `OPENAI_API_KEY`,
+    `poetry install` for the new `openai` dep, and a real backfill.
+
 **4. Surface change intelligence in landscapes (Asset 2 — turn data into a feature).**
 - Upgrade landscape monitoring from `lastSeenNctIds` (membership only) to **field-level
   changes** — "Sponsor X moved NCT… Recruiting → Terminated," "enrollment cut 400→120."

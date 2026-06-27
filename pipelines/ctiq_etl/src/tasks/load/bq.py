@@ -238,6 +238,42 @@ def get_existing_embeddings_hash( nct_ids: list[str],
  
     query_job = client.query(sql, job_config=job_config)
     results = query_job.result()
- 
+
     return {(row.nct_id, row.field_type, row.chunk_id): row.source_hash for row in results}
+
+
+def get_existing_eligibility_hash(
+    nct_ids: list[str],
+    gcp_project: str = settings.gcp_project_id,
+    dataset: str = settings.bq_dataset,
+    table: str = settings.bq_eligibility_table,
+    client: Optional[Client] = None,
+) -> dict[str, str]:
+    """For a list of nct_ids, return {nct_id: source_hash} of already-extracted eligibility.
+
+    One hash per trial (the hash of the whole eligibility blob). Lets the caller skip the
+    LLM call for trials whose eligibility text is unchanged — the dominant backfill cost.
+    Returns {} if the table doesn't exist yet (first run).
+    """
+    if not nct_ids:
+        return {}
+    if client is None:
+        client = bigquery.Client()
+
+    sql = f"""
+    SELECT nct_id, ANY_VALUE(source_hash) AS source_hash
+    FROM `{gcp_project}.{dataset}.{table}`
+    WHERE nct_id IN UNNEST(@nct_ids)
+    GROUP BY nct_id
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ArrayQueryParameter("nct_ids", "STRING", nct_ids)],
+    )
+    try:
+        results = client.query(sql, job_config=job_config).result()
+    except Exception as exc:
+        logger.warning("Could not read existing eligibility hashes (%s) — extracting all", exc)
+        return {}
+
+    return {row.nct_id: row.source_hash for row in results}
     

@@ -37,12 +37,25 @@ from prefect import flow, get_run_logger, task
 from prefect.tasks import exponential_backoff
 
 from src.config import settings
-from src.schemas.tables import EMBEDDING_TABLE_CONFIG, TABLE_CONFIGS
+from src.schemas.tables import (
+    ELIGIBILITY_TABLE_CONFIG,
+    EMBEDDING_TABLE_CONFIG,
+    TABLE_CONFIGS,
+)
 from src.set_logger import configure_logging
 from src.tasks.extract import extract_studies_streaming
-from src.tasks.load.gcs_load import upload_embeddings_batch, upload_studies_batch
+from src.tasks.load.gcs_load import (
+    upload_eligibility_batch,
+    upload_embeddings_batch,
+    upload_studies_batch,
+)
 from src.tasks.load.bq import load_batch_to_bigquery
-from src.tasks.load.pg import upsert_trials, upsert_embeddings
+from src.tasks.load.pg import (
+    upsert_eligibility_criteria,
+    upsert_trials,
+    upsert_embeddings,
+)
+from src.tasks.transform.eligibility_extract import extract_trials
 from src.tasks.transform.embed import get_embedder
 from src.tasks.transform.transform_studies import transform_studies
 
@@ -109,6 +122,64 @@ def embeddings_chunk_task(
     skip_existing_check: bool = False,
 ) -> list[dict]:
     return get_embedder().embed_trials(transformed_studies, skip_existing_check=skip_existing_check)
+
+
+@task(
+    name="eligibility-extract-chunk",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def eligibility_extract_chunk_task(
+    transformed_studies: list[dict],
+    ingestion_date: date,
+    skip_existing_check: bool = False,
+) -> list[dict]:
+    return extract_trials(
+        transformed_studies,
+        ingestion_date=ingestion_date,
+        skip_existing_check=skip_existing_check,
+    )
+
+
+@task(
+    name="upload-eligibility-chunk",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def gcs_upload_eligibility_chunk_task(eligibility_rows, run_id: str, chunk_idx: int, ingested_at: date) -> int:
+    upload_eligibility_batch(eligibility_rows=eligibility_rows, bucket_name=settings.gcs_bucket, chunk_idx=chunk_idx, prefix=settings.gcs_eligibility_prefix, batch_id=run_id, ingestion_date=ingested_at)
+    return len(eligibility_rows)
+
+
+@task(
+    name="pg-upsert-eligibility",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def pg_upsert_eligibility_task(eligibility_rows: list[dict]) -> int:
+    if not settings.pg_database_url:
+        return 0
+    return upsert_eligibility_criteria(
+        eligibility_rows=eligibility_rows,
+        database_url=settings.pg_database_url,
+    )
+
+
+@task(
+    name="bq-load-eligibility",
+    retries=2,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def bq_load_eligibility_task(run_id: str, ingestion_date: date) -> Optional[int]:
+    load_batch_to_bigquery(
+        bucket=settings.gcs_bucket,
+        prefix=settings.gcs_eligibility_prefix,
+        ingestion_date=ingestion_date,
+        batch_id=run_id,
+        project=settings.gcp_project_id,
+        dataset=settings.bq_dataset,
+        table_configs=ELIGIBILITY_TABLE_CONFIG,
+    )
 
 
 @task(
@@ -192,6 +263,7 @@ def clinical_trials_etl_flow(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     skip_embeddings: bool = False,
+    skip_eligibility: bool = False,
     skip_existing_check: bool = False,
 ):
     """
@@ -206,6 +278,9 @@ def clinical_trials_etl_flow(
     skip_embeddings:
         Set ``True`` to only load trial data without generating embeddings
         (useful for quick backfills or debugging).
+    skip_eligibility:
+        Set ``True`` to skip structured-eligibility extraction (the LLM step).
+        It is also skipped automatically when no OpenAI key is configured.
     """
     logger = get_run_logger()
     
@@ -235,16 +310,20 @@ def clinical_trials_etl_flow(
     # no longer risk OOM.  A single BQ load job runs after all chunks are done.
     total_trials = 0
     total_embedding_chunks = 0
+    total_eligibility_rows = 0
     embed_chunk_idx = 0
+    elig_chunk_idx = 0
     ingested_at = datetime.now(timezone.utc).date()
     ingested_at_dt = datetime.now(timezone.utc)
+    # Eligibility runs only when an LLM is configured (the extractor no-ops otherwise).
+    run_eligibility = not skip_eligibility and bool(settings.openai_api_key)
+    trial_batch_size = settings.embedding_trial_batch_size
     for chunk_idx, raw_chunk in enumerate(extract_studies_streaming(start, end)):
         trials = transform_task(raw_chunk)
         uploaded = gcs_upload_trials_chunk_task(trials, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
         total_trials += uploaded
         pg_upsert_trials_task(trials, ingestion_date=ingested_at, ingested_at=ingested_at_dt)
         if not skip_embeddings:
-            trial_batch_size = settings.embedding_trial_batch_size
             for sub_idx in range(0, len(trials), trial_batch_size):
                 sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
                 embeddings = embeddings_chunk_task(sub_batch, skip_existing_check=full_load or skip_existing_check)
@@ -252,15 +331,32 @@ def clinical_trials_etl_flow(
                 total_embedding_chunks += len(embeddings)
                 embed_chunk_idx += 1
                 pg_upsert_embeddings_task(embeddings)
+        if run_eligibility:
+            for sub_idx in range(0, len(trials), trial_batch_size):
+                sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
+                eligibility_rows = eligibility_extract_chunk_task(
+                    sub_batch, ingestion_date=ingested_at,
+                    skip_existing_check=full_load or skip_existing_check,
+                )
+                if eligibility_rows:
+                    gcs_upload_eligibility_chunk_task(eligibility_rows, run_id=run_id, chunk_idx=elig_chunk_idx, ingested_at=ingested_at)
+                    total_eligibility_rows += len(eligibility_rows)
+                    pg_upsert_eligibility_task(eligibility_rows)
+                elig_chunk_idx += 1
 
     if skip_embeddings:
         logger.info("Skipping embedding generation (--skip-embeddings)")
+    if not run_eligibility:
+        logger.info("Skipping eligibility extraction (--skip-eligibility or no OpenAI key)")
 
     # ── Stage 3: Single BQ load per table ─────────────────────────────────────
     bq_load_trials_task(run_id, ingested_at) if total_trials else 0
 
     if not skip_embeddings and total_embedding_chunks:
         bq_load_embeddings_task(run_id, ingested_at)
+
+    if run_eligibility and total_eligibility_rows:
+        bq_load_eligibility_task(run_id, ingested_at)
 
     logger.info("Flow complete: run_id=%s", run_id)
 
@@ -282,9 +378,14 @@ if __name__ == "__main__":
         help="Load trial data only, skip embedding generation.",
     )
     parser.add_argument(
+        "--skip-eligibility",
+        action="store_true",
+        help="Skip structured-eligibility LLM extraction (also auto-skipped without an OpenAI key).",
+    )
+    parser.add_argument(
         "--skip-existing-check",
         action="store_true",
-        help="Skip BQ hash lookup and embed all chunks unconditionally. Useful for test runs and initial loads.",
+        help="Skip BQ hash lookup and embed/extract all unconditionally. Useful for test runs and initial loads.",
     )
     args = parser.parse_args()
 
@@ -293,5 +394,6 @@ if __name__ == "__main__":
         from_date=args.from_date,
         to_date=args.to_date,
         skip_embeddings=args.skip_embeddings,
+        skip_eligibility=args.skip_eligibility,
         skip_existing_check=args.skip_existing_check,
     )

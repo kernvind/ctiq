@@ -23,3 +23,8 @@ TABLE_CONFIGS: tuple[TableConfig, ...] = (
 EMBEDDING_TABLE_CONFIG: tuple[TableConfig, ...] = (
     TableConfig("embeddings",    "clinical_trials_embeddings",     "replace_by_nct_id"),
 )
+
+# Structured eligibility (Stage A) — re-extracted per trial, so replace by nct_id.
+ELIGIBILITY_TABLE_CONFIG: tuple[TableConfig, ...] = (
+    TableConfig("eligibility_criteria", "clinical_trials_eligibility_criteria", "replace_by_nct_id"),
+)

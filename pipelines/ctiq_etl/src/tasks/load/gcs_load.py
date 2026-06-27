@@ -8,7 +8,11 @@ from typing import  Optional
  
 import pyarrow as pa
 import pyarrow.parquet as pq
-from src.tasks.load.studies_to_parquet import _embeddings_to_arrow_tables, _studies_to_arrow_tables
+from src.tasks.load.studies_to_parquet import (
+    _eligibility_to_arrow_tables,
+    _embeddings_to_arrow_tables,
+    _studies_to_arrow_tables,
+)
  
 logger = logging.getLogger(__name__)
 
@@ -117,6 +121,31 @@ def upload_embeddings_batch(
     tables = _embeddings_to_arrow_tables(
         embeddings,
     )
+    return _write_tables_to_gcs(
+        tables,
+        bucket_name=bucket_name,
+        prefix=prefix,
+        ingestion_date=ingestion_date,
+        chunk_idx=chunk_idx,
+        compression=compression,
+        batch_id=batch_id,
+    )
+
+
+def upload_eligibility_batch(
+    eligibility_rows: list[dict],
+    bucket_name: str,
+    chunk_idx: int,
+    batch_id: str,
+    ingestion_date: date,
+    prefix: str = "clinical_trials/staging",
+    compression: str = "snappy",
+) -> dict[str, str]:
+    """Write a batch of structured-eligibility rows (to_db_rows output) to GCS as Parquet.
+
+    Returns {table_name: gs:// URI}; an empty batch writes nothing.
+    """
+    tables = _eligibility_to_arrow_tables(eligibility_rows)
     return _write_tables_to_gcs(
         tables,
         bucket_name=bucket_name,
