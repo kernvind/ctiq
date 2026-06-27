@@ -29,6 +29,11 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     # LLM structured-output extraction (Stage A eligibility split — ROADMAP step 3)
     "openai>=1.50.0",
+    # ctiq-db (the trials ORM) is supplied via PYTHONPATH, not pip-installed (optional
+    # `local` group), but its third-party runtime deps must be in the main set so
+    # `poetry export --only main` (Docker) and `poetry install` (local) both provide them.
+    "pgvector>=0.3.0",
+    "psycopg[binary]>=3.1.0",
     # Utilities
     "python-dateutil>=2.9.0",
     "python-dotenv>=1.0.0",

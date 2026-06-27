@@ -288,6 +288,41 @@ class TrialEligibilityCriterion(Base):
     )
 
 
+class EligibilityBatchJob(Base):
+    """Tracks an OpenAI Batch job for Stage A eligibility extraction (async backfill path).
+
+    Standalone operational state — NOT a child of clinical_trials (no nct_id FK) and not
+    part of the BQ/parquet pipeline. Submit persists a row (status=submitted); a separate
+    poll step checks OpenAI, ingests results, and advances status to ingested. Makes the
+    590k backfill crash-safe and resumable.
+    """
+
+    __tablename__ = "eligibility_batch_jobs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # The OpenAI batch id — what the poller retrieves status on.
+    openai_batch_id: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
+    input_file_id: Mapped[Optional[str]] = mapped_column(String)
+    output_file_id: Mapped[Optional[str]] = mapped_column(String)
+    # submitted | in_progress | completed | ingested | failed | expired | cancelled.
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    request_count: Mapped[Optional[int]] = mapped_column(Integer)
+    # The date window + run this job covers (provenance).
+    from_date: Mapped[Optional[date]] = mapped_column(Date)
+    to_date: Mapped[Optional[date]] = mapped_column(Date)
+    run_id: Mapped[Optional[str]] = mapped_column(String)
+    # {nct_id: source_hash} — lets ingest write criterion rows (with the re-extract gate)
+    # without re-reading the source blobs.
+    request_hashes: Mapped[Optional[dict]] = mapped_column(JSONB)
+    # ingestion_date to stamp on the criterion rows at ingest (kept from submit time).
+    ingestion_date: Mapped[Optional[date]] = mapped_column(Date)
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
 class TrialEmbedding(Base):
     __tablename__ = "trial_embeddings"
 

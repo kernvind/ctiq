@@ -1,6 +1,7 @@
 from ctiq_db.models import (
     Base,
     ClinicalTrial,
+    EligibilityBatchJob,
     TrialArmGroup,
     TrialEligibilityCriterion,
     TrialEmbedding,
@@ -14,6 +15,7 @@ from ctiq_db.models import (
 __all__ = [
     "Base",
     "ClinicalTrial",
+    "EligibilityBatchJob",
     "TrialArmGroup",
     "TrialEligibilityCriterion",
     "TrialEmbedding",

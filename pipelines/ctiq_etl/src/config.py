@@ -64,6 +64,18 @@ class Settings(BaseSettings):
     # re-extraction on the per-trial source_hash so the 590k-trial backfill is paid once.
     openai_api_key: Optional[str] = None
     eligibility_extract_model: str = "gpt-5-mini"
+    # inline = synchronous per-chunk extraction, parallelized with a thread pool (good for
+    # incremental runs). batch = OpenAI Batch API: one async job per run, ~50% cheaper, no
+    # rate-limit juggling (the right tool for the 590k backfill). Selected per-run via the
+    # flow's --eligibility-mode flag; this is just the default.
+    eligibility_extract_mode: str = "inline"
+    # inline mode: number of concurrent OpenAI requests (thread pool).
+    eligibility_extract_concurrency: int = 8
+    # batch mode: how often to poll the batch job, max wait before giving up, and the
+    # per-batch request cap (OpenAI caps a single batch input file at 50k requests).
+    eligibility_batch_poll_seconds: int = 30
+    eligibility_batch_max_wait_seconds: int = 24 * 3600
+    eligibility_batch_max_requests: int = 50_000
 
     @property
     def bq_full_table_id(self) -> str:

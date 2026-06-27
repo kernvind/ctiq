@@ -56,6 +56,7 @@ from src.tasks.load.pg import (
     upsert_embeddings,
 )
 from src.tasks.transform.eligibility_extract import extract_trials
+from src.tasks.transform.eligibility_batch import submit_jobs
 from src.tasks.transform.embed import get_embedder
 from src.tasks.transform.transform_studies import transform_studies
 
@@ -143,6 +144,36 @@ def eligibility_extract_chunk_task(
         transformed_studies,
         ingestion_date=ingestion_date,
         skip_existing_check=skip_existing_check,
+    )
+
+
+@task(
+    name="eligibility-batch-submit",
+    retries=1,
+    retry_delay_seconds=exponential_backoff(backoff_factor=2),
+)
+def eligibility_submit_chunk_task(
+    transformed_studies: list[dict],
+    ingestion_date: date,
+    from_date: date,
+    to_date: date,
+    run_id: str,
+    skip_existing_check: bool = False,
+) -> int:
+    """Submit a chunk's trials as OpenAI batch job(s) and persist tracking rows (non-blocking).
+
+    Results are ingested later by the eligibility-poll flow. Returns the number of batch
+    jobs submitted for this chunk.
+    """
+    return len(
+        submit_jobs(
+            transformed_studies,
+            ingestion_date=ingestion_date,
+            from_date=from_date,
+            to_date=to_date,
+            run_id=run_id,
+            skip_existing_check=skip_existing_check,
+        )
     )
 
 
@@ -269,6 +300,7 @@ def clinical_trials_etl_flow(
     to_date: Optional[str] = None,
     skip_embeddings: bool = False,
     skip_eligibility: bool = False,
+    eligibility_mode: Optional[str] = None,
     skip_existing_check: bool = False,
 ):
     """
@@ -286,6 +318,10 @@ def clinical_trials_etl_flow(
     skip_eligibility:
         Set ``True`` to skip structured-eligibility extraction (the LLM step).
         It is also skipped automatically when no OpenAI key is configured.
+    eligibility_mode:
+        ``inline`` (concurrent per-chunk requests; default) or ``batch`` (OpenAI Batch
+        API — async, ~50% cheaper, the backfill tool). Falls back to
+        settings.eligibility_extract_mode when not given.
     """
     logger = get_run_logger()
     
@@ -316,26 +352,33 @@ def clinical_trials_etl_flow(
     total_trials = 0
     total_embedding_chunks = 0
     total_eligibility_rows = 0
+    total_batches_submitted = 0
     embed_chunk_idx = 0
     elig_chunk_idx = 0
     ingested_at = datetime.now(timezone.utc).date()
     ingested_at_dt = datetime.now(timezone.utc)
     # Eligibility runs only when an LLM is configured (the extractor no-ops otherwise).
     run_eligibility = not skip_eligibility and bool(settings.openai_api_key)
+    mode = (eligibility_mode or settings.eligibility_extract_mode).lower()
+    if mode not in ("inline", "batch"):
+        raise ValueError(f"eligibility_mode must be 'inline' or 'batch', got {mode!r}")
+    inline_elig = run_eligibility and mode == "inline"
+    batch_elig = run_eligibility and mode == "batch"
     trial_batch_size = settings.embedding_trial_batch_size
     for chunk_idx, raw_chunk in enumerate(extract_studies_streaming(start, end)):
         trials = transform_task(raw_chunk)
         uploaded = gcs_upload_trials_chunk_task(trials, run_id=run_id, chunk_idx=chunk_idx, ingested_at=ingested_at)
         total_trials += uploaded
         pg_upsert_trials_task(trials, ingestion_date=ingested_at, ingested_at=ingested_at_dt)
-        # One sub-batch loop: extract structured eligibility FIRST, then embed — the
-        # extracted items are fed into the same embeddings batch (per-item eligibility
-        # vectors ride with the trial's other chunks, so replace-by-nct_id stays correct).
+        # Sub-batch loop. In INLINE mode, eligibility is extracted per sub-batch and its
+        # per-item vectors ride in the same embeddings batch (one writer per nct_id). In
+        # BATCH mode, eligibility is produced once per chunk *after* this loop (async), so
+        # here we only embed the trial's own chunks.
         for sub_idx in range(0, len(trials), trial_batch_size):
             sub_batch = trials[sub_idx : sub_idx + trial_batch_size]
 
             eligibility_rows: list[dict] = []
-            if run_eligibility:
+            if inline_elig:
                 eligibility_rows = eligibility_extract_chunk_task(
                     sub_batch, ingestion_date=ingested_at,
                     skip_existing_check=full_load or skip_existing_check,
@@ -357,10 +400,22 @@ def clinical_trials_etl_flow(
                 embed_chunk_idx += 1
                 pg_upsert_embeddings_task(embeddings)
 
+        # BATCH mode: submit this chunk's trials as OpenAI batch job(s) and persist tracking
+        # rows — NON-blocking. Results are ingested later by the eligibility-poll flow
+        # (poll_and_ingest), which writes rows + per-item vectors to Postgres.
+        if batch_elig:
+            total_batches_submitted += eligibility_submit_chunk_task(
+                trials, ingestion_date=ingested_at,
+                from_date=start, to_date=end, run_id=run_id,
+                skip_existing_check=full_load or skip_existing_check,
+            )
+
     if skip_embeddings:
         logger.info("Skipping embedding generation (--skip-embeddings)")
     if not run_eligibility:
         logger.info("Skipping eligibility extraction (--skip-eligibility or no OpenAI key)")
+    else:
+        logger.info("Eligibility extraction mode: %s", mode)
 
     # ── Stage 3: Single BQ load per table ─────────────────────────────────────
     bq_load_trials_task(run_id, ingested_at) if total_trials else 0
@@ -368,8 +423,13 @@ def clinical_trials_etl_flow(
     if not skip_embeddings and total_embedding_chunks:
         bq_load_embeddings_task(run_id, ingested_at)
 
-    if run_eligibility and total_eligibility_rows:
+    if inline_elig and total_eligibility_rows:
         bq_load_eligibility_task(run_id, ingested_at)
+    if batch_elig:
+        logger.info(
+            "Submitted %d eligibility batch job(s) — run the eligibility-poll flow to ingest",
+            total_batches_submitted,
+        )
 
     logger.info("Flow complete: run_id=%s", run_id)
 
@@ -396,6 +456,13 @@ if __name__ == "__main__":
         help="Skip structured-eligibility LLM extraction (also auto-skipped without an OpenAI key).",
     )
     parser.add_argument(
+        "--eligibility-mode",
+        choices=["inline", "batch"],
+        default=None,
+        help="inline = concurrent per-chunk requests (default); batch = OpenAI Batch API "
+             "(~50%% cheaper, async — the backfill tool). Defaults to settings.eligibility_extract_mode.",
+    )
+    parser.add_argument(
         "--skip-existing-check",
         action="store_true",
         help="Skip BQ hash lookup and embed/extract all unconditionally. Useful for test runs and initial loads.",
@@ -408,5 +475,6 @@ if __name__ == "__main__":
         to_date=args.to_date,
         skip_embeddings=args.skip_embeddings,
         skip_eligibility=args.skip_eligibility,
+        eligibility_mode=args.eligibility_mode,
         skip_existing_check=args.skip_existing_check,
     )

@@ -218,12 +218,14 @@ class TrialEmbedder:
         now = datetime.now(timezone.utc)
         rows: list[dict] = []
         for chunk, vec in zip(chunks, vectors):
+            # Strip NUL (0x00) — Postgres text columns reject it; can appear in source prose.
+            chunk_text = chunk.chunk_text.replace("\x00", "")
             rows.append({
                 "nct_id": chunk.nct_id,
                 "field_type": chunk.field_type,
                 "chunk_id": chunk.chunk_id,
-                "chunk_text": chunk.chunk_text,
-                "source_hash": _hash_text(chunk.chunk_text),
+                "chunk_text": chunk_text,
+                "source_hash": _hash_text(chunk_text),
                 "embedding": vec.tolist(),
                 "model_version": self.model_version,
                 "ingested_at": now,

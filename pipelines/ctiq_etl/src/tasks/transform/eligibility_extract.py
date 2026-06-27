@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from enum import Enum
 from typing import Iterable, Literal, Optional
@@ -161,25 +162,17 @@ def get_eligibility_extractor() -> Optional["EligibilityExtractor"]:
     return _extractor_instance
 
 
-def extract_trials(
+def collect_pending(
     transformed_studies: Iterable[dict],
-    ingestion_date: date,
     skip_existing_check: bool = False,
-) -> list[dict]:
-    """Extract structured eligibility for a batch of trials → trial_eligibility_criteria rows.
+) -> dict[str, tuple[str, str]]:
+    """Index trials needing extraction → {nct_id: (eligibility_text, source_hash)}.
 
-    LLM cost is per-trial, so re-extraction is gated on the eligibility blob's `source_hash`:
-    trials whose text is unchanged since the last run are skipped (their existing rows are
-    left untouched by the replace-by-nct_id load). Pass skip_existing_check=True to force a
-    full re-extract (backfills / test runs). No-ops to [] when no extractor is configured.
+    Trims/skips trials with no eligibility text and, unless skip_existing_check, drops trials
+    whose blob hash is unchanged since the last run (the source_hash re-extract gate). Shared
+    by the inline and batch paths so the gating logic lives in one place.
     """
-    extractor = get_eligibility_extractor()
-    if extractor is None:
-        logger.info("Eligibility extraction skipped: no OpenAI key configured")
-        return []
-
-    # Index trials by nct_id with their eligibility blob + precomputed hash.
-    pending: dict[str, tuple[str, str]] = {}  # nct_id -> (text, source_hash)
+    pending: dict[str, tuple[str, str]] = {}
     for transformed in transformed_studies:
         if not transformed:
             continue
@@ -190,10 +183,7 @@ def extract_trials(
             continue
         pending[nct_id] = (text, eligibility_source_hash(text))
 
-    if not pending:
-        return []
-
-    if not skip_existing_check:
+    if pending and not skip_existing_check:
         from src.tasks.load.bq import get_existing_eligibility_hash
 
         existing = get_existing_eligibility_hash(nct_ids=list(pending))
@@ -201,19 +191,66 @@ def extract_trials(
             if existing.get(nct_id) == source_hash:
                 logger.info("Skipping eligibility for %s (unchanged since last run)", nct_id)
                 del pending[nct_id]
+    return pending
+
+
+def lupd_map(studies: list[dict]) -> dict[str, object]:
+    """Map nct_id → the trial's last_update_post_date (provenance for criterion rows).
+    Shared by the inline and batch paths so both stamp the same value."""
+    return {
+        s["trial"]["nct_id"]: s["trial"].get("last_update_post_date")
+        for s in studies if s and s.get("trial", {}).get("nct_id")
+    }
+
+
+def extract_trials(
+    transformed_studies: Iterable[dict],
+    ingestion_date: date,
+    skip_existing_check: bool = False,
+) -> list[dict]:
+    """Inline extraction → trial_eligibility_criteria rows. Requests run **concurrently**
+    (thread pool, size = settings.eligibility_extract_concurrency) — same cost as serial,
+    but ~Nx faster wall-clock. For the 590k backfill prefer the Batch API path
+    (eligibility_batch.py), which is ~50% cheaper. No-ops to [] when no key is configured.
+    """
+    extractor = get_eligibility_extractor()
+    if extractor is None:
+        logger.info("Eligibility extraction skipped: no OpenAI key configured")
+        return []
+
+    studies = list(transformed_studies)  # materialize: iterated twice (pending + provenance)
+    lupd_by_nct = lupd_map(studies)  # carry trial last_update_post_date onto criterion rows
+    pending = collect_pending(studies, skip_existing_check)
+    if not pending:
+        return []
+
+    workers = max(1, settings.eligibility_extract_concurrency)
+
+    def _extract_one(item: tuple[str, tuple[str, str]]):
+        nct_id, (text, source_hash) = item
+        return nct_id, source_hash, extractor.extract(text)
 
     rows: list[dict] = []
-    for nct_id, (text, source_hash) in pending.items():
-        items = extractor.extract(text)
-        if not items:
-            continue
-        rows.extend(
-            to_db_rows(nct_id, items, source_hash=source_hash, ingestion_date=ingestion_date)
-        )
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for nct_id, source_hash, items in pool.map(_extract_one, pending.items()):
+            if items:
+                rows.extend(
+                    to_db_rows(
+                        nct_id, items, source_hash=source_hash, ingestion_date=ingestion_date,
+                        last_update_post_date=lupd_by_nct.get(nct_id),
+                    )
+                )
     logger.info(
-        "Eligibility extraction: %d trials → %d criterion rows", len(pending), len(rows)
+        "Eligibility extraction (inline, %d workers): %d trials → %d criterion rows",
+        workers, len(pending), len(rows),
     )
     return rows
+
+
+def _no_nul(value):
+    """Strip NUL (0x00) bytes — PostgreSQL text/varchar columns reject them, and they
+    occasionally slip in via the source eligibility prose / model output."""
+    return value.replace("\x00", "") if isinstance(value, str) else value
 
 
 def to_db_rows(
@@ -227,14 +264,16 @@ def to_db_rows(
     """Map extracted criteria to trial_eligibility_criteria column dicts (load-path ready).
 
     `predicate` is intentionally omitted (Stage B). `display_order` preserves emit order.
+    String fields are NUL-stripped so Postgres accepts them (also fixes the downstream
+    embedding chunk_text, which derives from these rows).
     """
     return [
         {
             "nct_id": nct_id,
             "criterion_type": item.criterion_type,
-            "text": item.text,
+            "text": _no_nul(item.text),
             "category": item.category.value,
-            "subtype": item.subtype,
+            "subtype": _no_nul(item.subtype),
             "confidence": item.confidence,
             "is_actionable": item.is_actionable,
             "source_bullet_index": item.source_bullet_index,

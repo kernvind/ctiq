@@ -4,11 +4,12 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import create_engine, delete
+from sqlalchemy import create_engine, delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ctiq_db.models import (
     ClinicalTrial,
+    EligibilityBatchJob,
     TrialArmGroup,
     TrialEligibilityCriterion,
     TrialEmbedding,
@@ -18,6 +19,10 @@ from ctiq_db.models import (
     TrialOfficial,
     TrialOutcome,
 )
+
+# Batch-job statuses that still need attention (status check and/or ingest). Terminal
+# states (ingested/failed/expired/cancelled) are excluded.
+_ACTIVE_BATCH_STATUSES = ("submitted", "in_progress", "completed")
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +126,17 @@ def upsert_embeddings(
     database_url: str,
 ) -> int:
     """
-    Replace embedding rows for all affected nct_ids (same strategy as child tables).
+    Replace embedding rows for the (nct_id, field_type) pairs present in this batch.
 
-    Deletes all existing embeddings for nct_ids present in the batch, then
-    inserts the new rows. This keeps the table consistent when chunks are
-    added, removed, or changed between runs.
+    The delete is scoped to the field types actually in the batch — not all of an nct_id's
+    embeddings — so independent writers can populate different field types for the same
+    trial without clobbering each other (e.g. the batch-mode eligibility path writes
+    eligibility_inclusion/_exclusion *after* the trial's title/summary were written in the
+    streaming pass). It also stops hash-gating from deleting unchanged-but-skipped chunks.
+
+    Caveat: a field type that disappears entirely for a trial isn't cleared here (it's not
+    in the batch). Removing a retired field type (e.g. the old single `eligibility`) is a
+    one-time `DELETE ... WHERE field_type = '...'`.
 
     Returns the number of embedding rows processed.
     """
@@ -133,17 +144,23 @@ def upsert_embeddings(
         return 0
 
     nct_ids = list({row["nct_id"] for row in embeddings})
+    field_types = list({row["field_type"] for row in embeddings})
 
     engine = create_engine(database_url)
     try:
         with engine.begin() as conn:
-            conn.execute(delete(TrialEmbedding).where(TrialEmbedding.nct_id.in_(nct_ids)))
+            conn.execute(
+                delete(TrialEmbedding).where(
+                    TrialEmbedding.nct_id.in_(nct_ids),
+                    TrialEmbedding.field_type.in_(field_types),
+                )
+            )
             for batch in _batched(embeddings, _BATCH_SIZE):
                 conn.execute(pg_insert(TrialEmbedding).values(batch))
 
         logger.info(
-            "Postgres: replaced or inserted embeddings for %d nct_ids (%d rows)",
-            len(nct_ids), len(embeddings),
+            "Postgres: replaced or inserted embeddings for %d nct_ids, %d field types (%d rows)",
+            len(nct_ids), len(field_types), len(embeddings),
         )
     finally:
         engine.dispose()
@@ -187,3 +204,63 @@ def upsert_eligibility_criteria(
         engine.dispose()
 
     return len(eligibility_rows)
+
+
+# ─── Eligibility batch-job tracking (async backfill) ──────────────────────────
+
+def create_batch_job(database_url: str, job: dict) -> None:
+    """Persist a submitted OpenAI batch job (status=submitted). `job` is a column dict."""
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(pg_insert(EligibilityBatchJob).values(job))
+        logger.info("Postgres: recorded batch job %s (%s requests)",
+                    job.get("openai_batch_id"), job.get("request_count"))
+    finally:
+        engine.dispose()
+
+
+def get_active_batch_jobs(database_url: str) -> list[dict]:
+    """Return non-terminal batch jobs (submitted/in_progress/completed) as plain dicts —
+    everything the poller needs to check status and ingest."""
+    cols = (
+        EligibilityBatchJob.openai_batch_id,
+        EligibilityBatchJob.output_file_id,
+        EligibilityBatchJob.status,
+        EligibilityBatchJob.request_hashes,
+        EligibilityBatchJob.ingestion_date,
+    )
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(*cols).where(EligibilityBatchJob.status.in_(_ACTIVE_BATCH_STATUSES))
+            ).all()
+    finally:
+        engine.dispose()
+    return [
+        {
+            "openai_batch_id": r.openai_batch_id,
+            "output_file_id": r.output_file_id,
+            "status": r.status,
+            "request_hashes": r.request_hashes or {},
+            "ingestion_date": r.ingestion_date,
+        }
+        for r in rows
+    ]
+
+
+def update_batch_job(database_url: str, openai_batch_id: str, **fields) -> None:
+    """Patch a batch job row by openai_batch_id (status, *_at timestamps, error, etc.)."""
+    if not fields:
+        return
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                update(EligibilityBatchJob)
+                .where(EligibilityBatchJob.openai_batch_id == openai_batch_id)
+                .values(**fields)
+            )
+    finally:
+        engine.dispose()
