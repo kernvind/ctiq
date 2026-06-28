@@ -53,6 +53,40 @@ class CriterionCategory(str, Enum):
     OTHER = "other"
 
 
+class Predicate(BaseModel):
+    """Stage B: the normalized, machine-comparable form of a criterion — one flat object
+    covering the enumerable categories. Only the fields relevant to a criterion's category
+    are filled; the rest stay null. Prose-y categories (comorbidity, diagnosis, …) get no
+    predicate at all (null on ExtractedCriterion).
+
+    Field → category guide:
+      biomarker:           marker, qualifier, assay, op, value, unit, relation, unknown_status
+      performance_status:  scale, min, max
+      disease_stage:       stage, modifiers
+      prior_therapy:       therapy_class, relation, max_lines
+      demographic:         min, max, unit
+      lab_value:           analyte, op, value, unit
+    """
+
+    marker: Optional[str] = None              # gene/protein, e.g. EGFR, PD-L1
+    qualifier: Optional[str] = None           # e.g. "sensitizing", "activating"
+    assay: Optional[str] = None               # e.g. "VENTANA SP263"
+    scale: Optional[str] = None               # performance status scale, e.g. ECOG
+    analyte: Optional[str] = None             # lab analyte, e.g. ANC, creatinine
+    therapy_class: Optional[str] = None       # e.g. "EGFR TKI", "checkpoint inhibitor"
+    op: Optional[Literal[">=", "<=", ">", "<", "==", "!="]] = None
+    value: Optional[float] = None
+    unit: Optional[str] = None                # e.g. "%TC", "/uL", "years"
+    min: Optional[float] = None               # inclusive range low (e.g. ECOG/age)
+    max: Optional[float] = None               # inclusive range high
+    max_lines: Optional[int] = None           # prior_therapy line cap
+    stage: Optional[list[str]] = None         # e.g. ["IV"], ["IIIA","IIIB"]
+    modifiers: Optional[list[str]] = None     # e.g. ["metastatic","recurrent"]
+    relation: Optional[Literal["required", "excluded", "allowed", "prohibited"]] = None
+    # When the marker's status is unknown/untested, is the patient eligible or excluded?
+    unknown_status: Optional[Literal["eligible", "excluded"]] = None
+
+
 class ExtractedCriterion(BaseModel):
     """One atomic eligibility assertion. Maps 1:1 onto a trial_eligibility_criteria row."""
 
@@ -63,6 +97,8 @@ class ExtractedCriterion(BaseModel):
     category: CriterionCategory
     # Free-text refinement: required when category is OTHER; optional detail elsewhere.
     subtype: Optional[str] = None
+    # Stage B normalized predicate — populated only for enumerable categories, else null.
+    predicate: Optional[Predicate] = None
     # Self-reported confidence in [0, 1]; low values feed the downstream "uncertain" bucket.
     confidence: float = Field(ge=0.0, le=1.0)
     # False for boilerplate like "Other protocol-defined criteria apply" — never a filter.
@@ -97,12 +133,30 @@ short `subtype`) rather than forcing a poor fit.
 - Set is_actionable=false for boilerplate that is not a real filter (e.g. "Other \
 protocol-defined inclusion/exclusion criteria apply", "willing and able to provide \
 informed consent" is consent_logistics and actionable=true; pure boilerplate is not).
-- confidence in [0,1] reflects how cleanly the assertion classified."""
+- confidence in [0,1] reflects how cleanly the assertion classified.
+- predicate: fill the normalized predicate ONLY for these categories (leave fields you \
+cannot ground in the text null); for ALL other categories set predicate to null:
+  * biomarker: marker (gene/protein), qualifier (e.g. "sensitizing"), assay, op+value+unit \
+(e.g. PD-L1 >= 1 %TC), relation ("required" for inclusion, "excluded" for exclusion), and \
+unknown_status ("eligible"/"excluded") when the text states how unknown/untested status is treated.
+  * performance_status: scale (e.g. "ECOG") + min/max ("ECOG 0-1" -> min 0, max 1).
+  * disease_stage: stage (e.g. ["IV"]) + modifiers (e.g. ["metastatic","recurrent"]).
+  * prior_therapy: therapy_class, relation ("prohibited"/"required"/"allowed"), max_lines if a line cap is stated.
+  * demographic: min/max + unit (age in "years").
+  * lab_value: analyte + op + value + unit.
+  Never invent values not present in the text."""
+
+
+# Bump when the prompt or output schema changes so the source_hash gate re-extracts
+# everything instead of silently skipping (the hash is over the input blob, not the output).
+_EXTRACTOR_VERSION = "2-predicates"
 
 
 def eligibility_source_hash(text: str) -> str:
-    """SHA-256 of the raw eligibility blob — gate re-extraction on this (skip if unchanged)."""
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+    """Version-salted SHA-256 of the raw eligibility blob — gate re-extraction on this.
+    Salting with the extractor version means a prompt/schema change invalidates old hashes,
+    so the next run re-extracts (e.g. to backfill Stage B predicates) rather than skipping."""
+    return hashlib.sha256(f"{_EXTRACTOR_VERSION}\x1f{text}".encode("utf-8")).hexdigest()
 
 
 class EligibilityExtractor:
@@ -274,6 +328,9 @@ def to_db_rows(
             "text": _no_nul(item.text),
             "category": item.category.value,
             "subtype": _no_nul(item.subtype),
+            # Stage B predicate → JSONB (drop null fields). PG-only for now (the parquet/BQ
+            # eligibility schema omits `predicate`, so this key is ignored there).
+            "predicate": item.predicate.model_dump(exclude_none=True) if item.predicate else None,
             "confidence": item.confidence,
             "is_actionable": item.is_actionable,
             "source_bullet_index": item.source_bullet_index,
