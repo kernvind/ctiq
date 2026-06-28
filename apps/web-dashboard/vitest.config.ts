@@ -6,7 +6,11 @@ import path from 'node:path';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['lib/**/*.test.ts', 'app/**/*.test.ts'],
+    include: [
+      'lib/**/*.test.ts',
+      'app/**/*.test.ts',
+      'components/**/*.test.ts',
+    ],
   },
   resolve: {
     // Mirror the tsconfig "@/*": "./*" alias.

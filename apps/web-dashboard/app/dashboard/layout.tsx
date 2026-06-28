@@ -16,7 +16,7 @@ export default async function DashboardLayout({
         <div className="flex items-center gap-6">
           <span className="text-sm font-semibold">CTIQ Health</span>
           <div className="hidden md:flex">
-            <DashboardNav />
+            <DashboardNav user={user} />
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -34,7 +34,7 @@ export default async function DashboardLayout({
 
       <main className="flex-1 pb-16 md:pb-0">{children}</main>
 
-      <BottomTabBar />
+      <BottomTabBar user={user} />
     </div>
   );
 }

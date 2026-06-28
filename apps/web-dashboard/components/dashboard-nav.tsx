@@ -3,20 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@repo/ui/lib/utils";
+import type { CurrentUser } from "@/lib/actions/user/me/actions";
+import { visibleNavLinks } from "./dashboard-nav-links";
 
-const NAV_LINKS = [
-  { href: "/dashboard", label: "Overview" },
-  { href: "/dashboard/trials", label: "Trial Search" },
-  { href: "/dashboard/saved", label: "Saved" },
-  { href: "/dashboard/landscapes", label: "Landscapes" },
-];
-
-export function DashboardNav() {
+export function DashboardNav({ user }: { user: CurrentUser | null }) {
   const pathname = usePathname();
-
+  const role = user?.role ?? "PATIENT";
+  const visibleLinks = visibleNavLinks(role);
   return (
     <nav className="flex items-center gap-1">
-      {NAV_LINKS.map(({ href, label }) => (
+      {visibleLinks.map(({ href, label }) => (
         <Link
           key={href}
           href={href}
