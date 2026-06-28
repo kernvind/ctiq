@@ -49,8 +49,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 from src.app.modules.trial_search.router import router as search_router
-# All search routes require the internal token; `/` (health) stays open for probes.
+from src.app.modules.eligibility_match.router import router as match_router
+# All API routes require the internal token; `/` (health) stays open for probes.
 app.include_router(search_router, dependencies=[Depends(verify_internal_token)])
+app.include_router(match_router, dependencies=[Depends(verify_internal_token)])
 
 
 @app.get("/")

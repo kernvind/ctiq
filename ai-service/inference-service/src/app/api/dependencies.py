@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.app.modules.trial_search.repository import TrialSearchRepository
 from src.app.modules.trial_search.service import TrialSearchService
 from src.app.modules.trial_search.planning.protocol import QueryPlannerProtocol
+from src.app.modules.eligibility_match.repository import EligibilityMatchRepository
+from src.app.modules.eligibility_match.service import EligibilityMatchService
 from src.app.infra.embed.embedder import Embedder
 from src.app.core.config import get_settings, Settings
 
@@ -51,3 +53,20 @@ def get_trial_search_service(
 
 
 TrialSearchServiceDep = Annotated[TrialSearchService, Depends(get_trial_search_service)]
+
+
+def get_eligibility_match_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> EligibilityMatchRepository:
+    return EligibilityMatchRepository(session=session)
+
+
+def get_eligibility_match_service(
+    repository: Annotated[EligibilityMatchRepository, Depends(get_eligibility_match_repository)],
+) -> EligibilityMatchService:
+    return EligibilityMatchService(repository=repository)
+
+
+EligibilityMatchServiceDep = Annotated[
+    EligibilityMatchService, Depends(get_eligibility_match_service)
+]
