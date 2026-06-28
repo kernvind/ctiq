@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional
 
 from src.app.infra.embed.embedder import Embedder
@@ -62,11 +63,15 @@ class PatientMatchService:
     async def match_trials(self, request: PatientMatchRequest) -> list[MatchedTrial]:
         condition = request.condition.strip()
         if not condition:
+            logger.info("Empty query received; returning no results")
             return []
+        logger.info("Query received; condition=%r recruiting_only=%s top_k=%d", condition, request.recruiting_only, request.top_k)
 
         # Candidate generation: semantic rank over recruiting trials for the condition
         # (reuses the Slice-3 vector search + structured pre-filters).
+        t0 = time.perf_counter()
         embedding = self.embedder.embed_query(condition)
+        t_embed = time.perf_counter()
         statuses = ("RECRUITING",) if request.recruiting_only else None
         rows = await self.search_repository.vector_search(
             embedding=embedding,
@@ -75,6 +80,7 @@ class PatientMatchService:
             statuses=statuses,
             conditions=(condition,),
         )
+        t_search = time.perf_counter()
         candidates = [
             {
                 "nct_id": r.nct_id,
@@ -89,12 +95,20 @@ class PatientMatchService:
         criteria_by_nct = await self.match_repository.get_criteria_bulk(
             [c["nct_id"] for c in candidates]
         )
+        t_criteria = time.perf_counter()
         ranked = rank_matches(candidates, criteria_by_nct, request.profile)
+        t_rank = time.perf_counter()
         logger.info(
-            "Patient match: condition=%r candidates=%d (eligible=%d possible=%d excluded=%d)",
+            "Patient match: condition=%r candidates=%d (eligible=%d possible=%d excluded=%d) "
+            "timing_ms embed=%.0f search=%.0f criteria=%.0f rank=%.0f total=%.0f",
             condition, len(ranked),
             sum(m.signal.value == "likely_eligible" for m in ranked),
             sum(m.signal.value == "possible" for m in ranked),
             sum(m.signal.value == "likely_excluded" for m in ranked),
+            (t_embed - t0) * 1000,
+            (t_search - t_embed) * 1000,
+            (t_criteria - t_search) * 1000,
+            (t_rank - t_criteria) * 1000,
+            (t_rank - t0) * 1000,
         )
         return ranked

@@ -30,6 +30,10 @@ async def lifespan(app: FastAPI):
         device=device,
     )
     app.state.embedder = Embedder(model)
+    # Warm the model: the FIRST encode lazily initializes the forward pass (1-3s on
+    # CPU/MPS, more with nomic's trust_remote_code). Pay that cost here at startup so the
+    # first real search/match request isn't the one that eats it.
+    app.state.embedder.embed_query("warmup")
 
     engine = create_engine(settings.pg_database_url)
     app.state.db_engine = engine
