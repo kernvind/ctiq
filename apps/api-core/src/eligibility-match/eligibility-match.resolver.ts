@@ -1,4 +1,6 @@
 import { Args, Int, Mutation, Resolver } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
+import { Role } from '@repo/db';
 import { EligibilityMatchService } from './eligibility-match.service';
 import {
   MatchResult,
@@ -11,8 +13,17 @@ import {
   ZodPatientProfileSchema,
 } from '@repo/zod-validations';
 import { zodPipe } from '../common/pipes/zod-validation.pipe';
+import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
+/**
+ * Eligibility matching is a clinician decision-support feature (Pro tier) — gated to the
+ * CLINICIAN role. Auth guard runs first to attach the user, then RolesGuard enforces.
+ */
 @Resolver()
+@UseGuards(GqlAuthGuard, RolesGuard)
+@Roles(Role.CLINICIAN)
 export class EligibilityMatchResolver {
   constructor(private readonly service: EligibilityMatchService) {}
 
