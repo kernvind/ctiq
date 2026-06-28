@@ -302,9 +302,16 @@ def extract_trials(
 
 
 def _no_nul(value):
-    """Strip NUL (0x00) bytes — PostgreSQL text/varchar columns reject them, and they
-    occasionally slip in via the source eligibility prose / model output."""
-    return value.replace("\x00", "") if isinstance(value, str) else value
+    """Strip NUL (0x00) recursively — Postgres text AND jsonb reject it (jsonb can't store
+    \\u0000 even inside a string value). Handles plain strings and the nested predicate
+    dict/lists. NUL occasionally slips in via the source prose / model output."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {k: _no_nul(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_no_nul(v) for v in value]
+    return value
 
 
 def to_db_rows(
@@ -330,7 +337,7 @@ def to_db_rows(
             "subtype": _no_nul(item.subtype),
             # Stage B predicate → JSONB (drop null fields). PG-only for now (the parquet/BQ
             # eligibility schema omits `predicate`, so this key is ignored there).
-            "predicate": item.predicate.model_dump(exclude_none=True) if item.predicate else None,
+            "predicate": _no_nul(item.predicate.model_dump(exclude_none=True)) if item.predicate else None,
             "confidence": item.confidence,
             "is_actionable": item.is_actionable,
             "source_bullet_index": item.source_bullet_index,
