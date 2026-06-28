@@ -1,9 +1,17 @@
 import logging
 from typing import Optional
 
-from src.app.modules.eligibility_match.evaluator import match_criteria
+from src.app.infra.embed.embedder import Embedder
+from src.app.modules.eligibility_match.evaluator import match_criteria, rank_matches
 from src.app.modules.eligibility_match.repository import EligibilityMatchRepository
-from src.app.modules.eligibility_match.schemas import MatchResult, PatientProfile
+from src.app.modules.eligibility_match.schemas import (
+    MatchedTrial,
+    MatchResult,
+    PatientMatchRequest,
+    PatientProfile,
+)
+from src.app.modules.trial_search.planning.schemas import Field
+from src.app.modules.trial_search.repository import TrialSearchRepository
 
 logger = logging.getLogger(__name__)
 
@@ -31,3 +39,62 @@ class EligibilityMatchService:
             nct_id, result.signal.value, result.n_pass, result.n_fail, result.n_uncertain,
         )
         return result
+
+
+class PatientMatchService:
+    """Patient-first matching (ROADMAP step 6): given a profile + condition, generate
+    candidate trials (semantic search over recruiting trials for the condition), batch-match
+    each against the profile, and return them ranked (likely-eligible first). Stateless — the
+    profile is never persisted. The matcher is pure logic (no LLM), so batch matching a
+    candidate set is cheap.
+    """
+
+    def __init__(
+        self,
+        search_repository: TrialSearchRepository,
+        match_repository: EligibilityMatchRepository,
+        embedder: Embedder,
+    ):
+        self.search_repository = search_repository
+        self.match_repository = match_repository
+        self.embedder = embedder
+
+    async def match_trials(self, request: PatientMatchRequest) -> list[MatchedTrial]:
+        condition = request.condition.strip()
+        if not condition:
+            return []
+
+        # Candidate generation: semantic rank over recruiting trials for the condition
+        # (reuses the Slice-3 vector search + structured pre-filters).
+        embedding = self.embedder.embed_query(condition)
+        statuses = ("RECRUITING",) if request.recruiting_only else None
+        rows = await self.search_repository.vector_search(
+            embedding=embedding,
+            fields=(Field.SUMMARY, Field.TITLE),
+            top_k=request.top_k,
+            statuses=statuses,
+            conditions=(condition,),
+        )
+        candidates = [
+            {
+                "nct_id": r.nct_id,
+                "brief_title": r.brief_title,
+                "overall_status": r.overall_status,
+                "phases": r.phases,
+                "conditions": r.conditions,
+                "lead_sponsor_name": r.lead_sponsor_name,
+            }
+            for r in rows
+        ]
+        criteria_by_nct = await self.match_repository.get_criteria_bulk(
+            [c["nct_id"] for c in candidates]
+        )
+        ranked = rank_matches(candidates, criteria_by_nct, request.profile)
+        logger.info(
+            "Patient match: condition=%r candidates=%d (eligible=%d possible=%d excluded=%d)",
+            condition, len(ranked),
+            sum(m.signal.value == "likely_eligible" for m in ranked),
+            sum(m.signal.value == "possible" for m in ranked),
+            sum(m.signal.value == "likely_excluded" for m in ranked),
+        )
+        return ranked

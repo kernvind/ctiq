@@ -38,6 +38,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/match/trials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Match Trials
+         * @description Patient-first: rank recruiting trials for a condition by how well the patient profile
+         *     matches their structured eligibility. Drill into POST /match/trials/{nct_id} for the
+         *     per-criterion verdicts. The profile is evaluated in-request and never stored.
+         */
+        post: operations["match_trials_api_v1_match_trials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/match/trials/{nct_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Match Trial
+         * @description Stateless eligibility match of a patient profile against one trial's predicates.
+         *
+         *     The profile is evaluated in-request and never stored. 404 when the trial has no
+         *     extracted eligibility criteria yet.
+         */
+        post: operations["match_trial_api_v1_match_trials__nct_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -76,6 +121,21 @@ export interface components {
             phone?: string | null;
             /** Email */
             email?: string | null;
+        };
+        /**
+         * CriterionVerdict
+         * @description Per-criterion outcome — this list IS the match explanation.
+         */
+        CriterionVerdict: {
+            /** Criterion Type */
+            criterion_type: string;
+            /** Category */
+            category: string | null;
+            /** Text */
+            text: string;
+            verdict: components["schemas"]["Verdict"];
+            /** Reason */
+            reason: string;
         };
         /** EligibilitySummary */
         EligibilitySummary: {
@@ -137,6 +197,52 @@ export interface components {
             /** Nearest Distance Km */
             nearest_distance_km?: number | null;
         };
+        /** MatchResult */
+        MatchResult: {
+            /** Nct Id */
+            nct_id: string;
+            signal: components["schemas"]["TrialSignal"];
+            /** N Pass */
+            n_pass: number;
+            /** N Fail */
+            n_fail: number;
+            /** N Uncertain */
+            n_uncertain: number;
+            /** N Not Evaluated */
+            n_not_evaluated: number;
+            /** Verdicts */
+            verdicts: components["schemas"]["CriterionVerdict"][];
+        };
+        /**
+         * MatchedTrial
+         * @description A candidate trial + its match summary, for the patient-first ranked list (no per-
+         *     criterion verdicts — drill into POST /match/trials/{nct_id} for those).
+         */
+        MatchedTrial: {
+            /** Nct Id */
+            nct_id: string;
+            /** Brief Title */
+            brief_title?: string | null;
+            /** Overall Status */
+            overall_status?: string | null;
+            /** Phases */
+            phases?: string[];
+            /** Conditions */
+            conditions?: string[];
+            /** Lead Sponsor Name */
+            lead_sponsor_name?: string | null;
+            signal: components["schemas"]["TrialSignal"];
+            /** N Pass */
+            n_pass: number;
+            /** N Fail */
+            n_fail: number;
+            /** N Uncertain */
+            n_uncertain: number;
+            /** N Not Evaluated */
+            n_not_evaluated: number;
+            /** Has Criteria */
+            has_criteria: boolean;
+        };
         /** MatchingChunk */
         MatchingChunk: {
             /** Field Type */
@@ -145,6 +251,52 @@ export interface components {
             chunk_text: string;
             /** Distance */
             distance: number;
+        };
+        /**
+         * PatientMatchRequest
+         * @description Patient-first request: a profile + the condition to search candidates for.
+         */
+        PatientMatchRequest: {
+            profile: components["schemas"]["PatientProfile"];
+            /** Condition */
+            condition: string;
+            /**
+             * Top K
+             * @default 50
+             */
+            top_k: number;
+            /**
+             * Recruiting Only
+             * @default true
+             */
+            recruiting_only: boolean;
+        };
+        /**
+         * PatientProfile
+         * @description A structured patient snapshot to evaluate against trial predicates. All optional —
+         *     missing fields produce UNCERTAIN verdicts rather than guesses. NEVER persisted.
+         */
+        PatientProfile: {
+            /** Age Years */
+            age_years?: number | null;
+            /** Sex */
+            sex?: string | null;
+            /** Ecog */
+            ecog?: number | null;
+            /** Stage */
+            stage?: string | null;
+            /** Biomarkers */
+            biomarkers?: {
+                [key: string]: string | number;
+            };
+            /** Prior Therapies */
+            prior_therapies?: string[];
+            /** Treatment Naive */
+            treatment_naive?: boolean | null;
+            /** Labs */
+            labs?: {
+                [key: string]: number;
+            };
         };
         /** Reference */
         Reference: {
@@ -352,6 +504,11 @@ export interface components {
             /** Time Frame */
             time_frame?: string | null;
         };
+        /**
+         * TrialSignal
+         * @enum {string}
+         */
+        TrialSignal: "likely_eligible" | "possible" | "likely_excluded";
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -365,6 +522,11 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Verdict
+         * @enum {string}
+         */
+        Verdict: "pass" | "fail" | "uncertain" | "not_evaluated";
     };
     responses: never;
     parameters: never;
@@ -429,6 +591,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrialDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_trials_api_v1_match_trials_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchedTrial"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_trial_api_v1_match_trials__nct_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-token"?: string | null;
+            };
+            path: {
+                /** @description ClinicalTrials.gov NCT id */
+                nct_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatientProfile"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchResult"];
                 };
             };
             /** @description Validation Error */

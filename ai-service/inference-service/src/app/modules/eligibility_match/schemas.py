@@ -56,3 +56,33 @@ class MatchResult(BaseModel):
     n_uncertain: int
     n_not_evaluated: int
     verdicts: list[CriterionVerdict]
+
+
+class MatchedTrial(BaseModel):
+    """A candidate trial + its match summary, for the patient-first ranked list (no per-
+    criterion verdicts — drill into POST /match/trials/{nct_id} for those)."""
+
+    nct_id: str
+    brief_title: Optional[str] = None
+    overall_status: Optional[str] = None
+    phases: list[str] = Field(default_factory=list)
+    conditions: list[str] = Field(default_factory=list)
+    lead_sponsor_name: Optional[str] = None
+    signal: TrialSignal
+    n_pass: int
+    n_fail: int
+    n_uncertain: int
+    n_not_evaluated: int
+    # False when the trial has no extracted eligibility yet — signal defaults to POSSIBLE,
+    # so the UI can show "not enough structured data" rather than a real "possible".
+    has_criteria: bool
+
+
+class PatientMatchRequest(BaseModel):
+    """Patient-first request: a profile + the condition to search candidates for."""
+
+    profile: PatientProfile
+    condition: str
+    top_k: int = 50
+    recruiting_only: bool = True
+

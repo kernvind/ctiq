@@ -32,3 +32,26 @@ class EligibilityMatchRepository:
             }
             for r in rows
         ]
+
+    async def get_criteria_bulk(self, nct_ids: list[str]) -> dict[str, list[dict]]:
+        """Load criteria for many trials in one query → {nct_id: [criterion dicts]} (patient-
+        first batch match). nct_ids absent from the result simply have no extracted criteria."""
+        if not nct_ids:
+            return {}
+        rows = await self.session.scalars(
+            select(TrialEligibilityCriterion)
+            .where(TrialEligibilityCriterion.nct_id.in_(nct_ids))
+            .order_by(TrialEligibilityCriterion.nct_id, TrialEligibilityCriterion.display_order)
+        )
+        grouped: dict[str, list[dict]] = {}
+        for r in rows:
+            grouped.setdefault(r.nct_id, []).append(
+                {
+                    "criterion_type": r.criterion_type,
+                    "category": r.category,
+                    "text": r.text,
+                    "predicate": r.predicate,
+                    "is_actionable": r.is_actionable,
+                }
+            )
+        return grouped

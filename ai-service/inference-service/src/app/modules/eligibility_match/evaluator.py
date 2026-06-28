@@ -18,6 +18,7 @@ from typing import Optional
 
 from src.app.modules.eligibility_match.schemas import (
     CriterionVerdict,
+    MatchedTrial,
     MatchResult,
     PatientProfile,
     TrialSignal,
@@ -180,6 +181,8 @@ def evaluate_criterion(criterion: dict, profile: PatientProfile) -> CriterionVer
         verdict, reason = _eval_prior_therapy(pred, profile, ctype)
         return _v(verdict, reason)
 
+    if not isinstance(category, str):
+        return _v(Verdict.NOT_EVALUATED, f"category {category!r} not deterministically evaluable")
     fn = _DISPATCH.get(category)
     if fn is None:
         return _v(Verdict.NOT_EVALUATED, f"category {category!r} not deterministically evaluable")
@@ -216,3 +219,43 @@ def match_criteria(nct_id: str, criteria: list[dict], profile: PatientProfile) -
         n_pass=n_pass, n_fail=n_fail, n_uncertain=n_uncertain, n_not_evaluated=n_not_eval,
         verdicts=verdicts,
     )
+
+
+# Lower = better; the patient-first list leads with likely-eligible trials.
+_SIGNAL_PRIORITY = {
+    TrialSignal.LIKELY_ELIGIBLE: 0,
+    TrialSignal.POSSIBLE: 1,
+    TrialSignal.LIKELY_EXCLUDED: 2,
+}
+
+
+def rank_matches(
+    candidates: list[dict],
+    criteria_by_nct: dict[str, list[dict]],
+    profile: PatientProfile,
+) -> list[MatchedTrial]:
+    """Patient-first: match each candidate (dict with nct_id + display fields) against the
+    profile and rank — likely-eligible first, then fewest fails / most passes. Stable sort,
+    so the candidate order (semantic relevance) is the final tiebreak.
+    """
+    matched: list[MatchedTrial] = []
+    for c in candidates:
+        nct_id = c["nct_id"]
+        crits = criteria_by_nct.get(nct_id, [])
+        res = match_criteria(nct_id, crits, profile)
+        matched.append(
+            MatchedTrial(
+                nct_id=nct_id,
+                brief_title=c.get("brief_title"),
+                overall_status=c.get("overall_status"),
+                phases=c.get("phases") or [],
+                conditions=c.get("conditions") or [],
+                lead_sponsor_name=c.get("lead_sponsor_name"),
+                signal=res.signal,
+                n_pass=res.n_pass, n_fail=res.n_fail,
+                n_uncertain=res.n_uncertain, n_not_evaluated=res.n_not_evaluated,
+                has_criteria=bool(crits),
+            )
+        )
+    matched.sort(key=lambda m: (_SIGNAL_PRIORITY[m.signal], m.n_fail, -m.n_pass))
+    return matched

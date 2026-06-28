@@ -10,3 +10,6 @@ export * from "./types/trial-search/trial-search.type";
 export * from "./types/trial-search/trial-detail.type";
 export * from "./inputs/trial-search/trial-search.input";
 export * from "./types/user/auth-payload.type";
+export * from "./enums/eligibility-match.enum";
+export * from "./types/eligibility-match/match-result.type";
+export * from "./inputs/eligibility-match/patient-profile.input";

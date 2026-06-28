@@ -2,10 +2,26 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path
 
-from src.app.api.dependencies import EligibilityMatchServiceDep
-from src.app.modules.eligibility_match.schemas import MatchResult, PatientProfile
+from src.app.api.dependencies import EligibilityMatchServiceDep, PatientMatchServiceDep
+from src.app.modules.eligibility_match.schemas import (
+    MatchedTrial,
+    MatchResult,
+    PatientMatchRequest,
+    PatientProfile,
+)
 
 router = APIRouter(prefix="/api/v1/match", tags=["match"])
+
+
+@router.post("/trials", response_model=list[MatchedTrial])
+async def match_trials(
+    service: PatientMatchServiceDep,
+    request: PatientMatchRequest,
+) -> list[MatchedTrial]:
+    """Patient-first: rank recruiting trials for a condition by how well the patient profile
+    matches their structured eligibility. Drill into POST /match/trials/{nct_id} for the
+    per-criterion verdicts. The profile is evaluated in-request and never stored."""
+    return await service.match_trials(request)
 
 
 @router.post("/trials/{nct_id}", response_model=MatchResult)

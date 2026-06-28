@@ -7,7 +7,10 @@ from src.app.modules.trial_search.repository import TrialSearchRepository
 from src.app.modules.trial_search.service import TrialSearchService
 from src.app.modules.trial_search.planning.protocol import QueryPlannerProtocol
 from src.app.modules.eligibility_match.repository import EligibilityMatchRepository
-from src.app.modules.eligibility_match.service import EligibilityMatchService
+from src.app.modules.eligibility_match.service import (
+    EligibilityMatchService,
+    PatientMatchService,
+)
 from src.app.infra.embed.embedder import Embedder
 from src.app.core.config import get_settings, Settings
 
@@ -70,3 +73,18 @@ def get_eligibility_match_service(
 EligibilityMatchServiceDep = Annotated[
     EligibilityMatchService, Depends(get_eligibility_match_service)
 ]
+
+
+def get_patient_match_service(
+    search_repository: Annotated[TrialSearchRepository, Depends(get_trial_search_repository)],
+    match_repository: Annotated[EligibilityMatchRepository, Depends(get_eligibility_match_repository)],
+    embedder: Annotated[Embedder, Depends(get_embedder)],
+) -> PatientMatchService:
+    return PatientMatchService(
+        search_repository=search_repository,
+        match_repository=match_repository,
+        embedder=embedder,
+    )
+
+
+PatientMatchServiceDep = Annotated[PatientMatchService, Depends(get_patient_match_service)]

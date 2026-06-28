@@ -1,4 +1,8 @@
-from src.app.modules.eligibility_match.evaluator import evaluate_criterion, match_criteria
+from src.app.modules.eligibility_match.evaluator import (
+    evaluate_criterion,
+    match_criteria,
+    rank_matches,
+)
 from src.app.modules.eligibility_match.schemas import PatientProfile, TrialSignal, Verdict
 
 
@@ -158,3 +162,24 @@ def test_rollup_possible_when_nothing_evaluable():
     crits = [_crit(category="comorbidity", predicate=None)]
     r = match_criteria("NCT1", crits, PatientProfile())
     assert r.signal is TrialSignal.POSSIBLE
+
+
+# ── patient-first ranking ─────────────────────────────────────────────────────
+def test_rank_matches_orders_eligible_first_excluded_last():
+    candidates = [
+        {"nct_id": "NCT-EXCL", "brief_title": "B"},
+        {"nct_id": "NCT-ELIG", "brief_title": "A"},
+        {"nct_id": "NCT-NOCRIT", "brief_title": "C"},
+    ]
+    criteria_by_nct = {
+        "NCT-ELIG": [_crit(category="performance_status", predicate=_ecog(0, 1))],   # pass
+        "NCT-EXCL": [_crit(category="demographic", predicate={"min": 18})],          # fail (age 12)
+        # NCT-NOCRIT: no criteria → possible, has_criteria False
+    }
+    profile = PatientProfile(ecog=1, age_years=12)
+    ranked = rank_matches(candidates, criteria_by_nct, profile)
+
+    assert [m.nct_id for m in ranked] == ["NCT-ELIG", "NCT-NOCRIT", "NCT-EXCL"]
+    assert ranked[0].signal is TrialSignal.LIKELY_ELIGIBLE and ranked[0].has_criteria
+    assert ranked[1].signal is TrialSignal.POSSIBLE and ranked[1].has_criteria is False
+    assert ranked[2].signal is TrialSignal.LIKELY_EXCLUDED

@@ -7,6 +7,14 @@ type AuthPayload {
   refreshToken: String!
 }
 
+input BiomarkerInput {
+  """Marker, e.g. EGFR, PD-L1"""
+  marker: String!
+
+  """Value as text: "60" (numeric) or "wild-type" (status)"""
+  value: String!
+}
+
 type Collaborator {
   name: String
 
@@ -25,6 +33,20 @@ input CreateLandscapeInput {
   name: String!
   phase: String
   q: String!
+}
+
+type CriterionVerdict {
+  category: String
+
+  """inclusion | exclusion"""
+  criterion_type: String!
+
+  """Human-readable why"""
+  reason: String!
+
+  """Verbatim criterion text"""
+  text: String!
+  verdict: Verdict!
 }
 
 """
@@ -60,6 +82,12 @@ type Facility {
   status: String
 }
 
+input LabInput {
+  """Analyte, e.g. ANC, creatinine"""
+  analyte: String!
+  value: Float!
+}
+
 type Landscape {
   createdAt: DateTime!
   id: ID!
@@ -92,6 +120,40 @@ input LoginInput {
   password: String!
 }
 
+type MatchResult {
+  n_fail: Int!
+  n_not_evaluated: Int!
+  n_pass: Int!
+  n_uncertain: Int!
+  nct_id: String!
+  signal: TrialSignal!
+  verdicts: [CriterionVerdict!]!
+}
+
+type MatchedTrial {
+  """Brief Title"""
+  brief_title: String
+  conditions: [String!]!
+
+  """
+  False when the trial has no extracted eligibility yet (signal defaults to possible)
+  """
+  has_criteria: Boolean!
+
+  """Lead Sponsor Name"""
+  lead_sponsor_name: String
+  n_fail: Int!
+  n_not_evaluated: Int!
+  n_pass: Int!
+  n_uncertain: Int!
+  nct_id: String!
+
+  """Overall Status"""
+  overall_status: String
+  phases: [String!]!
+  signal: TrialSignal!
+}
+
 type MatchingChunk {
   chunk_text: String!
 
@@ -106,10 +168,33 @@ type Mutation {
   login(input: LoginInput!): AuthPayload!
   logout(refreshToken: String!): Boolean!
   markLandscapeSeen(id: ID!, nctIds: [String!]!): Landscape
+  matchTrial(nctId: String!, profile: PatientProfileInput!): MatchResult
+  matchTrials(condition: String!, profile: PatientProfileInput!, recruitingOnly: Boolean = true, topK: Int = 50): [MatchedTrial!]!
   refresh(refreshToken: String!): AuthPayload!
   saveTrial(nctId: String!): SavedTrial!
   signup(input: SignupInput!): AuthPayload!
   unsaveTrial(nctId: String!): Boolean!
+}
+
+input PatientProfileInput {
+  age_years: Float
+  biomarkers: [BiomarkerInput!]! = []
+
+  """ECOG performance status"""
+  ecog: Int
+  labs: [LabInput!]! = []
+
+  """Prior therapy classes received"""
+  prior_therapies: [String!]! = []
+
+  """MALE | FEMALE"""
+  sex: String
+
+  """
+  Disease stage, e.g. "IV"
+  """
+  stage: String
+  treatment_naive: Boolean
 }
 
 type Query {
@@ -316,9 +401,24 @@ type TrialOutcome {
   time_frame: String
 }
 
+"""Trial-level eligibility signal rolled up from the criterion verdicts."""
+enum TrialSignal {
+  LIKELY_ELIGIBLE
+  LIKELY_EXCLUDED
+  POSSIBLE
+}
+
 type User {
   email: String!
   id: ID!
   name: String
   role: Role!
+}
+
+"""Per-criterion match outcome."""
+enum Verdict {
+  FAIL
+  NOT_EVALUATED
+  PASS
+  UNCERTAIN
 }
