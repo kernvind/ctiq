@@ -1,0 +1,17 @@
+mutation matchTrial_mutation($nctId: String!, $profile: PatientProfileInput!) {
+  matchTrial(nctId: $nctId, profile: $profile) {
+    n_fail
+    n_not_evaluated
+    n_pass
+    n_uncertain
+    nct_id
+    signal
+    verdicts {
+      category
+      criterion_type
+      reason
+      text
+      verdict
+    }
+  }
+}

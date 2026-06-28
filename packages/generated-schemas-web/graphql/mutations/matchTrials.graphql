@@ -1,0 +1,21 @@
+mutation matchTrials_mutation($condition: String!, $profile: PatientProfileInput!, $recruitingOnly: Boolean = true, $topK: Int = 50) {
+  matchTrials(
+    condition: $condition
+    profile: $profile
+    recruitingOnly: $recruitingOnly
+    topK: $topK
+  ) {
+    brief_title
+    conditions
+    has_criteria
+    lead_sponsor_name
+    n_fail
+    n_not_evaluated
+    n_pass
+    n_uncertain
+    nct_id
+    overall_status
+    phases
+    signal
+  }
+}

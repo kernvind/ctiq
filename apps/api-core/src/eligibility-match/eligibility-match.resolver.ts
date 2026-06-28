@@ -5,7 +5,11 @@ import {
   MatchedTrial,
   PatientProfileInput,
 } from '@repo/graphql-types';
-import { ZodNctIdSchema } from '@repo/zod-validations';
+import {
+  ZodNctIdSchema,
+  ZodConditionSchema,
+  ZodPatientProfileSchema,
+} from '@repo/zod-validations';
 import { zodPipe } from '../common/pipes/zod-validation.pipe';
 
 @Resolver()
@@ -21,7 +25,11 @@ export class EligibilityMatchResolver {
   async matchTrial(
     @Args('nctId', { type: () => String }, zodPipe(ZodNctIdSchema))
     nctId: string,
-    @Args('profile', { type: () => PatientProfileInput })
+    @Args(
+      'profile',
+      { type: () => PatientProfileInput },
+      zodPipe(ZodPatientProfileSchema),
+    )
     profile: PatientProfileInput,
   ): Promise<MatchResult | null> {
     return this.service.matchTrial(nctId, profile);
@@ -34,8 +42,13 @@ export class EligibilityMatchResolver {
    */
   @Mutation(() => [MatchedTrial])
   async matchTrials(
-    @Args('condition', { type: () => String }) condition: string,
-    @Args('profile', { type: () => PatientProfileInput })
+    @Args('condition', { type: () => String }, zodPipe(ZodConditionSchema))
+    condition: string,
+    @Args(
+      'profile',
+      { type: () => PatientProfileInput },
+      zodPipe(ZodPatientProfileSchema),
+    )
     profile: PatientProfileInput,
     @Args('topK', { type: () => Int, nullable: true, defaultValue: 50 })
     topK: number,
