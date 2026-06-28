@@ -6,29 +6,30 @@ import type {
   MatchedTrial,
   MatchResult,
   CriterionVerdict,
+  TrialSignal,
+  Verdict,
 } from "@repo/generated-schemas-web";
 import {
   matchTrialsAction,
   matchTrialAction,
 } from "@/lib/actions/eligibility-match/actions";
+import { buildProfile, groupBySignal, type Pair } from "./match-logic";
 
-type Pair = { key: string; value: string };
-
-const SIGNAL_META: Record<string, { label: string; cls: string }> = {
-  likely_eligible: { label: "Likely eligible", cls: "bg-green-100 text-green-800" },
-  possible: { label: "Possible", cls: "bg-amber-100 text-amber-800" },
-  likely_excluded: { label: "Likely excluded", cls: "bg-red-100 text-red-700" },
+// Keyed by the GraphQL enum's serialized values (UPPERCASE — GraphQL emits enum *names*,
+// not the lowercase inference strings). Typed as Record<TrialSignal/Verdict, …> so the
+// keys stay in lockstep with the generated schema and can't drift to the wrong casing.
+const SIGNAL_META: Record<TrialSignal, { label: string; cls: string }> = {
+  LIKELY_ELIGIBLE: { label: "Likely eligible", cls: "bg-green-100 text-green-800" },
+  POSSIBLE: { label: "Possible", cls: "bg-amber-100 text-amber-800" },
+  LIKELY_EXCLUDED: { label: "Likely excluded", cls: "bg-red-100 text-red-700" },
 };
 
-const VERDICT_META: Record<string, { cls: string }> = {
-  pass: { cls: "text-green-700" },
-  fail: { cls: "text-red-700" },
-  uncertain: { cls: "text-amber-700" },
-  not_evaluated: { cls: "text-muted-foreground" },
+const VERDICT_META: Record<Verdict, { label: string; cls: string }> = {
+  PASS: { label: "Pass", cls: "bg-green-100 text-green-800" },
+  FAIL: { label: "Fail", cls: "bg-red-100 text-red-700" },
+  UNCERTAIN: { label: "Uncertain", cls: "bg-amber-100 text-amber-800" },
+  NOT_EVALUATED: { label: "Not eval.", cls: "bg-muted text-muted-foreground" },
 };
-
-// Group order for the ranked list.
-const SIGNAL_ORDER = ["likely_eligible", "possible", "likely_excluded"];
 
 export function MatchView() {
   // ── profile form state ──────────────────────────────────────────────────
@@ -49,20 +50,8 @@ export function MatchView() {
   const [verdicts, setVerdicts] = useState<Record<string, MatchResult | null>>({});
   const [openNct, setOpenNct] = useState<string | null>(null);
 
-  function buildProfile() {
-    return {
-      age_years: age ? Number(age) : null,
-      sex: sex || null,
-      ecog: ecog !== "" ? Number(ecog) : null,
-      stage: stage.trim() || null,
-      treatment_naive: treatmentNaive ? true : null,
-      biomarkers: biomarkers
-        .filter((b) => b.key.trim() && b.value.trim())
-        .map((b) => ({ marker: b.key.trim(), value: b.value.trim() })),
-      prior_therapies: priorTherapies.map((t) => t.trim()).filter(Boolean),
-      labs: [],
-    };
-  }
+  const currentProfile = () =>
+    buildProfile({ age, sex, ecog, stage, treatmentNaive, biomarkers, priorTherapies });
 
   function onSubmit() {
     setError(null);
@@ -71,7 +60,7 @@ export function MatchView() {
     startTransition(async () => {
       const state = await matchTrialsAction({
         condition,
-        profile: buildProfile(),
+        profile: currentProfile(),
       });
       if (state?.error) {
         setError(state.error);
@@ -90,7 +79,7 @@ export function MatchView() {
     setOpenNct(nctId);
     if (verdicts[nctId] !== undefined) return; // cached
     startTransition(async () => {
-      const state = await matchTrialAction({ nctId, profile: buildProfile() });
+      const state = await matchTrialAction({ nctId, profile: currentProfile() });
       setVerdicts((v) => ({ ...v, [nctId]: state?.error ? null : state?.result ?? null }));
     });
   }
@@ -188,19 +177,17 @@ export function MatchView() {
 
       {results && results.length > 0 && (
         <div className="flex flex-col gap-4">
-          {SIGNAL_ORDER.map((sig) => {
-            const group = results.filter((r) => r.signal === sig);
-            if (group.length === 0) return null;
-            const meta = SIGNAL_META[sig];
+          {groupBySignal(results).map(({ signal, trials }) => {
+            const meta = SIGNAL_META[signal];
             return (
-              <div key={sig} className="flex flex-col gap-2">
+              <div key={signal} className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${meta.cls}`}>
                     {meta.label}
                   </span>
-                  <span className="text-xs text-muted-foreground">{group.length}</span>
+                  <span className="text-xs text-muted-foreground">{trials.length}</span>
                 </div>
-                {group.map((t) => (
+                {trials.map((t) => (
                   <TrialRow
                     key={t.nct_id}
                     trial={t}
@@ -317,17 +304,22 @@ function TrialRow({
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {verdict.verdicts.map((v: CriterionVerdict, i: number) => (
-                <li key={i} className="flex gap-2 text-xs">
-                  <span className={`w-20 shrink-0 font-medium uppercase ${VERDICT_META[v.verdict]?.cls ?? ""}`}>
-                    {v.verdict}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span>{v.text}</span>
-                    <span className="block text-[11px] text-muted-foreground">{v.reason}</span>
-                  </span>
-                </li>
-              ))}
+              {verdict.verdicts.map((v: CriterionVerdict, i: number) => {
+                const meta = VERDICT_META[v.verdict];
+                return (
+                  <li key={i} className="flex gap-2 text-xs">
+                    <span
+                      className={`mt-0.5 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium ${meta?.cls ?? ""}`}
+                    >
+                      {meta?.label ?? v.verdict}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span>{v.text}</span>
+                      <span className="block text-[11px] text-muted-foreground">{v.reason}</span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

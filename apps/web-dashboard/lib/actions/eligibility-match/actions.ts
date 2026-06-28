@@ -1,6 +1,9 @@
 "use server";
 
-import { ZodMatchTrialsSchema, ZodMatchTrialSchema } from "@repo/zod-validations";
+import {
+  ZodMatchTrialsSchema,
+  ZodMatchTrialSchema,
+} from "@repo/zod-validations";
 import { withAuthedSdk } from "@/lib/authed-sdk";
 import { flattenZodErrors } from "@/lib/zod-errors";
 import type { MatchTrialsState, MatchTrialState } from "./match-types";
@@ -19,7 +22,9 @@ function messageOf(err: unknown): string {
 }
 
 /** Patient-first: rank recruiting trials for a condition by the profile's eligibility fit. */
-export async function matchTrialsAction(input: unknown): Promise<MatchTrialsState> {
+export async function matchTrialsAction(
+  input: unknown,
+): Promise<MatchTrialsState> {
   const parsed = ZodMatchTrialsSchema.safeParse(input);
   if (!parsed.success) {
     return { error: flattenZodErrors(parsed.error) };
@@ -29,6 +34,7 @@ export async function matchTrialsAction(input: unknown): Promise<MatchTrialsStat
     const data = await withAuthedSdk((sdk) =>
       sdk.matchTrials_mutation({ condition, profile, topK, recruitingOnly }),
     );
+    console.log("matchTrialAction: data received", data);
     return { results: data.matchTrials };
   } catch (err) {
     return { error: messageOf(err) };
@@ -36,7 +42,9 @@ export async function matchTrialsAction(input: unknown): Promise<MatchTrialsStat
 }
 
 /** Per-trial drill-in: per-criterion verdicts for one trial. */
-export async function matchTrialAction(input: unknown): Promise<MatchTrialState> {
+export async function matchTrialAction(
+  input: unknown,
+): Promise<MatchTrialState> {
   const parsed = ZodMatchTrialSchema.safeParse(input);
   if (!parsed.success) {
     return { error: flattenZodErrors(parsed.error) };
@@ -46,6 +54,7 @@ export async function matchTrialAction(input: unknown): Promise<MatchTrialState>
     const data = await withAuthedSdk((sdk) =>
       sdk.matchTrial_mutation({ nctId, profile }),
     );
+    console.log("matchTrialAction: data received", data);
     return { result: data.matchTrial ?? null };
   } catch (err) {
     return { error: messageOf(err) };
