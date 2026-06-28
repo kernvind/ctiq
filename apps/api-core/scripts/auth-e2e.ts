@@ -33,6 +33,8 @@ const LOGIN =
 const REFRESH =
   'mutation($rt:String!){refresh(refreshToken:$rt){accessToken refreshToken}}';
 const LOGOUT = 'mutation($rt:String!){logout(refreshToken:$rt)}';
+const MATCH_TRIALS =
+  'mutation($c:String!,$p:PatientProfileInput!){matchTrials(condition:$c,profile:$p){nct_id signal}}';
 
 async function main(): Promise<void> {
   const container = await new PostgreSqlContainer('postgres:16-alpine').start();
@@ -77,6 +79,32 @@ async function main(): Promise<void> {
       payload: JSON.stringify({ query, variables }),
     });
     return res.json() as GqlResponse;
+  };
+
+  const gqlAuth = async (
+    query: string,
+    variables: Record<string, unknown>,
+    token: string,
+  ): Promise<GqlResponse> => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/graphql',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      payload: JSON.stringify({ query, variables }),
+    });
+    return res.json() as GqlResponse;
+  };
+
+  const signupToken = async (
+    email: string,
+    role: string,
+  ): Promise<string> => {
+    const s = await gql(SIGNUP, { i: { email, password: 'password123', role } });
+    assert.equal(s.errors, undefined, `signup ${role} failed`);
+    return s.data?.signup.accessToken as string;
   };
 
   let failures = 0;
@@ -145,6 +173,30 @@ async function main(): Promise<void> {
     assert.match(err.message, /already exists/i);
     assert.equal(err.extensions?.statusCode, 409);
     assert.equal(err.extensions?.stacktrace, undefined);
+  });
+
+  // ── Eligibility matcher: clinician-only RBAC (ROADMAP step 6) ──────────────
+  await test('matchTrials is rejected without authentication', async () => {
+    const res = await gql(MATCH_TRIALS, { c: 'melanoma', p: {} });
+    assert.ok(res.errors, 'unauthenticated match should be rejected');
+    assert.ok(!res.data?.matchTrials);
+  });
+
+  await test('matchTrials is forbidden for a non-clinician (PATIENT)', async () => {
+    const token = await signupToken('match-patient@example.com', 'PATIENT');
+    const res = await gqlAuth(MATCH_TRIALS, { c: 'melanoma', p: {} }, token);
+    assert.ok(res.errors, 'PATIENT should be denied');
+    assert.match(res.errors![0].message, /insufficient permissions|forbidden/i);
+    assert.ok(!res.data?.matchTrials);
+  });
+
+  await test('matchTrials passes the role guard for a CLINICIAN', async () => {
+    const token = await signupToken('match-clinician@example.com', 'CLINICIAN');
+    const res = await gqlAuth(MATCH_TRIALS, { c: 'melanoma', p: {} }, token);
+    // The guard lets a clinician through; the call then fails reaching the (unavailable)
+    // inference service at SEARCH_API_URL — proving it was NOT blocked on permissions.
+    assert.ok(res.errors, 'expected a downstream error (inference unreachable in e2e)');
+    assert.doesNotMatch(res.errors![0].message, /insufficient permissions|forbidden/i);
   });
 
   await app.close();
