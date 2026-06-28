@@ -1,5 +1,5 @@
 .PHONY: schema-generate gen-api-types install \
-        test test-js test-py \
+        test test-js test-py test-etl \
         test-integration test-integration-api test-e2e test-integration-py test-all \
         docker-web-dashboard docker-api-core docker-inference docker-etl docker-all \
         up-api down-api logs-api \
@@ -40,12 +40,15 @@ tf-apply-shared:
 # One-time / CI dependency install. Run before `make test` / `make test-integration`.
 
 INFERENCE_DIR = ai-service/inference-service
+ETL_DIR = pipelines/ctiq_etl
 
 install:
 	pnpm install
 	# `local` group pulls in ctiq-db (the trials ORM) used by the pgvector integration
 	# test to build its schema from the real models. dev-only; Docker uses --only main.
 	cd $(INFERENCE_DIR) && poetry install --with dev,local
+	# ETL: dev group brings pytest for the unit suite.
+	cd $(ETL_DIR) && poetry install --with dev
 
 # ── Testing ────────────────────────────────────────────────────────────────────
 # Turbo only orchestrates the JS/TS packages, so the Python (pytest) and Docker-backed
@@ -58,7 +61,7 @@ install:
 #
 # Run `make install` first (installs JS + Python deps, incl. the pytest dev group).
 
-test: test-js test-py
+test: test-js test-py test-etl
 
 test-js:
 	pnpm turbo run test
@@ -66,6 +69,11 @@ test-js:
 # inference-service unit tests (integration tests are excluded by default in pyproject).
 test-py:
 	cd $(INFERENCE_DIR) && bash -c 'source .venv/bin/activate && python -m pytest'
+
+# ETL unit tests (pure logic; integration marker excluded by default in pyproject).
+# PYTHONPATH=. so the `src` package resolves; ctiq-db isn't needed by the unit suite.
+test-etl:
+	cd $(ETL_DIR) && bash -c 'source .venv/bin/activate && PYTHONPATH=. python -m pytest'
 
 test-integration: test-integration-api test-e2e test-integration-py
 

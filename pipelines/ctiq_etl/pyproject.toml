@@ -68,3 +68,16 @@ dev = [
     "ipykernel (>=7.2.0,<8.0.0)",
     "ipython (>=9.12.0,<10.0.0)"
 ]
+
+# Test deps in a poetry-native group so `poetry install --with dev` installs them
+# (mirrors the inference-service convention used by `make install`).
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0,<9.0.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Unit tests only by default; mark anything needing live OpenAI/GCP/DB as `integration`.
+addopts = "-m 'not integration'"
+markers = [
+    "integration: tests requiring external services (OpenAI/GCP/DB)",
+]
