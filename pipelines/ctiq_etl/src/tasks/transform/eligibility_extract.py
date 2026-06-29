@@ -22,7 +22,7 @@ from datetime import date
 from enum import Enum
 from typing import Iterable, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator
 
 from src.config import settings
 
@@ -100,11 +100,22 @@ class ExtractedCriterion(BaseModel):
     # Stage B normalized predicate — populated only for enumerable categories, else null.
     predicate: Optional[Predicate] = None
     # Self-reported confidence in [0, 1]; low values feed the downstream "uncertain" bucket.
-    confidence: float = Field(ge=0.0, le=1.0)
+    # Deliberately NOT Field(ge/le): those emit json-schema `minimum`/`maximum`, which OpenAI
+    # strict structured outputs reject — the call would 400 and fail-soft to zero criteria for
+    # every trial. We keep the schema clean and clamp the value below instead.
+    confidence: float
     # False for boilerplate like "Other protocol-defined criteria apply" — never a filter.
     is_actionable: bool
     # 0-based index of the source bullet this assertion was split from (compound-bullet trace).
     source_bullet_index: int
+
+    @field_validator("confidence")
+    @classmethod
+    def _clamp_confidence(cls, v: float) -> float:
+        """Clamp into [0, 1] rather than constrain. Runs in both the inline (`responses.parse`)
+        and batch (`model_validate_json`) paths since both instantiate this model, so an
+        out-of-range value from the model is corrected instead of discarding the whole trial."""
+        return max(0.0, min(1.0, v))
 
 
 class ExtractedEligibility(BaseModel):

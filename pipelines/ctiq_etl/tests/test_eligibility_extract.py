@@ -133,3 +133,29 @@ def test_extract_failsoft_on_exception():
     def boom(**kw):
         raise RuntimeError("api down")
     assert _extractor(boom).extract("text") == []  # never raises into the ETL
+
+
+# ── strict structured-output schema safety (regression for the silent-zero bug) ──
+def test_confidence_is_clamped_into_unit_interval():
+    # A model-returned value outside [0, 1] is corrected, not rejected (would lose the trial).
+    assert _crit(confidence=5.0).confidence == 1.0
+    assert _crit(confidence=-0.2).confidence == 0.0
+    assert _crit(confidence=0.7).confidence == 0.7
+
+
+def test_strict_schema_has_no_numeric_bounds():
+    # OpenAI strict structured outputs reject `minimum`/`maximum`; if a Field(ge/le) ever
+    # re-introduces them, every extract call 400s and fail-softs to zero criteria. Guard the
+    # exact schema the SDK sends (reuse the SDK converter the batch path also uses).
+    from openai.lib._pydantic import to_strict_json_schema
+
+    def _walk(node):
+        if isinstance(node, dict):
+            assert "minimum" not in node and "maximum" not in node, node
+            for v in node.values():
+                _walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                _walk(v)
+
+    _walk(to_strict_json_schema(ExtractedEligibility))
