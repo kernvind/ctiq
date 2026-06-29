@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import type { MatchedTrial, TrialSignal } from "@repo/generated-schemas-web";
-import { buildProfile, groupBySignal, type ProfileForm } from "./match-logic";
+import {
+  buildProfile,
+  groupBySignal,
+  isAssessable,
+  unassessedTrials,
+  type ProfileForm,
+} from "./match-logic";
 
 const EMPTY_FORM: ProfileForm = {
   age: "",
@@ -48,22 +54,69 @@ describe("buildProfile", () => {
   });
 });
 
+// Default counts make a trial *assessable* (n_pass:1); pass `counts` to override — e.g. all
+// zero for an unassessable trial (no extracted eligibility or prose-only).
+const trial = (
+  nct_id: string,
+  signal: TrialSignal,
+  counts: Partial<
+    Pick<
+      MatchedTrial,
+      "n_pass" | "n_fail" | "n_uncertain" | "n_not_evaluated" | "has_criteria"
+    >
+  > = {},
+): MatchedTrial =>
+  ({
+    nct_id,
+    signal,
+    has_criteria: true,
+    n_pass: 1,
+    n_fail: 0,
+    n_uncertain: 0,
+    n_not_evaluated: 0,
+    brief_title: null,
+    overall_status: null,
+    phases: [],
+    conditions: [],
+    lead_sponsor_name: null,
+    ...counts,
+  }) as MatchedTrial;
+
+describe("isAssessable", () => {
+  it("is true when any criterion resolved to pass/fail/uncertain", () => {
+    expect(isAssessable(trial("A", "POSSIBLE", { n_pass: 0, n_uncertain: 1 }))).toBe(true);
+    expect(isAssessable(trial("B", "LIKELY_EXCLUDED", { n_pass: 0, n_fail: 1 }))).toBe(true);
+  });
+
+  it("is false when nothing was evaluated (no criteria, or prose-only)", () => {
+    expect(isAssessable(trial("A", "POSSIBLE", { n_pass: 0, has_criteria: false }))).toBe(false);
+    expect(
+      isAssessable(trial("B", "POSSIBLE", { n_pass: 0, n_not_evaluated: 3 })),
+    ).toBe(false);
+  });
+});
+
+describe("unassessedTrials", () => {
+  it("returns only the unassessable trials, preserving order", () => {
+    const out = unassessedTrials([
+      trial("A", "LIKELY_ELIGIBLE"),
+      trial("B", "POSSIBLE", { n_pass: 0, has_criteria: false }),
+      trial("C", "POSSIBLE", { n_pass: 0, n_not_evaluated: 2 }),
+    ]);
+    expect(out.map((t) => t.nct_id)).toEqual(["B", "C"]);
+  });
+});
+
 describe("groupBySignal", () => {
-  const trial = (nct_id: string, signal: TrialSignal): MatchedTrial =>
-    ({
-      nct_id,
-      signal,
-      has_criteria: true,
-      n_pass: 0,
-      n_fail: 0,
-      n_uncertain: 0,
-      n_not_evaluated: 0,
-      brief_title: null,
-      overall_status: null,
-      phases: [],
-      conditions: [],
-      lead_sponsor_name: null,
-    }) as MatchedTrial;
+  it("excludes unassessable trials from the signal buckets", () => {
+    const groups = groupBySignal([
+      trial("A", "LIKELY_ELIGIBLE"),
+      trial("B", "POSSIBLE", { n_pass: 0, has_criteria: false }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].signal).toBe("LIKELY_ELIGIBLE");
+    expect(groups[0].trials.map((t) => t.nct_id)).toEqual(["A"]);
+  });
 
   it("orders eligible → possible → excluded and drops empty buckets", () => {
     const groups = groupBySignal([

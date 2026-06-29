@@ -13,7 +13,13 @@ import {
   matchTrialsAction,
   matchTrialAction,
 } from "@/lib/actions/eligibility-match/actions";
-import { buildProfile, groupBySignal, type Pair } from "./match-logic";
+import {
+  buildProfile,
+  groupBySignal,
+  isAssessable,
+  unassessedTrials,
+  type Pair,
+} from "./match-logic";
 
 // Keyed by the GraphQL enum's serialized values (UPPERCASE — GraphQL emits enum *names*,
 // not the lowercase inference strings). Typed as Record<TrialSignal/Verdict, …> so the
@@ -44,11 +50,18 @@ export function MatchView() {
 
   const [results, setResults] = useState<MatchedTrial[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  // Separate transitions: a drill-in must not disable the "Match trials" button, and vice versa.
+  const [matchPending, startMatch] = useTransition();
+  const [, startDrill] = useTransition();
 
   // Per-trial drill-in cache + which trial is expanded.
   const [verdicts, setVerdicts] = useState<Record<string, MatchResult | null>>({});
   const [openNct, setOpenNct] = useState<string | null>(null);
+  // Profile snapshot taken at match time. Drill-ins reuse THIS, not the live form — otherwise
+  // editing the form after ranking would make a trial's per-criterion verdicts disagree with
+  // the bucket it was sorted into.
+  const [matchedProfile, setMatchedProfile] =
+    useState<ReturnType<typeof buildProfile> | null>(null);
 
   const currentProfile = () =>
     buildProfile({ age, sex, ecog, stage, treatmentNaive, biomarkers, priorTherapies });
@@ -57,11 +70,10 @@ export function MatchView() {
     setError(null);
     setVerdicts({});
     setOpenNct(null);
-    startTransition(async () => {
-      const state = await matchTrialsAction({
-        condition,
-        profile: currentProfile(),
-      });
+    const profile = currentProfile();
+    setMatchedProfile(profile);
+    startMatch(async () => {
+      const state = await matchTrialsAction({ condition, profile });
       if (state?.error) {
         setError(state.error);
         setResults(null);
@@ -78,8 +90,9 @@ export function MatchView() {
     }
     setOpenNct(nctId);
     if (verdicts[nctId] !== undefined) return; // cached
-    startTransition(async () => {
-      const state = await matchTrialAction({ nctId, profile: currentProfile() });
+    const profile = matchedProfile ?? currentProfile();
+    startDrill(async () => {
+      const state = await matchTrialAction({ nctId, profile });
       setVerdicts((v) => ({ ...v, [nctId]: state?.error ? null : state?.result ?? null }));
     });
   }
@@ -156,10 +169,10 @@ export function MatchView() {
 
         <button
           onClick={onSubmit}
-          disabled={pending || condition.trim().length < 2}
+          disabled={matchPending || condition.trim().length < 2}
           className="mt-1 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
-          {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {matchPending && <Loader2 className="h-4 w-4 animate-spin" />}
           Match trials
         </button>
       </div>
@@ -199,6 +212,36 @@ export function MatchView() {
               </div>
             );
           })}
+
+          {/* Trials that matched the condition but the matcher couldn't assess — kept apart
+              from the ranked signal buckets so "no data" isn't mistaken for "borderline". */}
+          {(() => {
+            const unassessed = unassessedTrials(results);
+            if (unassessed.length === 0) return null;
+            return (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    Not enough data to assess
+                  </span>
+                  <span className="text-xs text-muted-foreground">{unassessed.length}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Recruiting trials matching the condition with no structured eligibility we can
+                  check yet — review these manually.
+                </p>
+                {unassessed.map((t) => (
+                  <TrialRow
+                    key={t.nct_id}
+                    trial={t}
+                    open={openNct === t.nct_id}
+                    verdict={verdicts[t.nct_id]}
+                    onToggle={() => toggleWhy(t.nct_id)}
+                  />
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -290,7 +333,16 @@ function TrialRow({
           </p>
         </div>
         <span className="shrink-0 text-[11px] text-muted-foreground">
-          {trial.n_pass}✓ {trial.n_fail}✗ {trial.n_uncertain}?
+          {isAssessable(trial) ? (
+            <>
+              {trial.n_pass}✓ {trial.n_fail}✗ {trial.n_uncertain}?
+              {trial.n_not_evaluated > 0 && ` · ${trial.n_not_evaluated} for review`}
+            </>
+          ) : trial.has_criteria ? (
+            `${trial.n_not_evaluated} criteria · manual review`
+          ) : (
+            "no eligibility data"
+          )}
         </span>
       </button>
 

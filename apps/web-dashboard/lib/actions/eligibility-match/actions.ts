@@ -6,6 +6,7 @@ import {
 } from "@repo/zod-validations";
 import { withAuthedSdk } from "@/lib/authed-sdk";
 import { flattenZodErrors } from "@/lib/zod-errors";
+import { logger } from "@/lib/logger";
 import type { MatchTrialsState, MatchTrialState } from "./match-types";
 
 /**
@@ -34,7 +35,8 @@ export async function matchTrialsAction(
     const data = await withAuthedSdk((sdk) =>
       sdk.matchTrials_mutation({ condition, profile, topK, recruitingOnly }),
     );
-    console.log("matchTrialAction: data received", data);
+    // Safe metadata only — never the profile (PHI) or the result bodies.
+    logger.info({ resultCount: data.matchTrials.length }, "matchTrials completed");
     return { results: data.matchTrials };
   } catch (err) {
     return { error: messageOf(err) };
@@ -54,7 +56,12 @@ export async function matchTrialAction(
     const data = await withAuthedSdk((sdk) =>
       sdk.matchTrial_mutation({ nctId, profile }),
     );
-    console.log("matchTrialAction: data received", data);
+    // Safe metadata only — log the trial id and whether criteria existed, never the
+    // profile (PHI) or the per-criterion verdicts.
+    logger.info(
+      { nctId, matched: data.matchTrial != null },
+      "matchTrial completed",
+    );
     return { result: data.matchTrial ?? null };
   } catch (err) {
     return { error: messageOf(err) };

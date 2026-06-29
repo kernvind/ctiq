@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
   // @repo/ui ships TypeScript source (no pre-compiled dist) — Next.js must
   // transpile it directly rather than trying to import compiled JS.
   transpilePackages: ["@repo/ui"],
+
+  // pino is a Node-only logger (lib/logger.ts) — keep it external so Next loads it
+  // as a real module instead of bundling it (recommended by pino under standalone).
+  serverExternalPackages: ["pino"],
 };
 
 export default nextConfig;
