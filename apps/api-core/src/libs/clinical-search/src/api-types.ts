@@ -242,6 +242,8 @@ export interface components {
             n_not_evaluated: number;
             /** Has Criteria */
             has_criteria: boolean;
+            /** Blockers */
+            blockers?: components["schemas"]["CriterionVerdict"][];
         };
         /** MatchingChunk */
         MatchingChunk: {
@@ -295,6 +297,10 @@ export interface components {
             treatment_naive?: boolean | null;
             /** Labs */
             labs?: {
+                [key: string]: number;
+            };
+            /** Washouts */
+            washouts?: {
                 [key: string]: number;
             };
         };

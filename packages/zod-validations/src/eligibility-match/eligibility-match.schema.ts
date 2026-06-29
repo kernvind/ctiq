@@ -20,6 +20,13 @@ export const ZodLabSchema = z.object({
 });
 export type ZodLabInput = z.infer<typeof ZodLabSchema>;
 
+export const ZodWashoutSchema = z.object({
+  event: z.string().trim().min(1, "Event is required"),
+  // Days since the therapy/event last occurred — feeds washout/temporal matching.
+  days_since: z.number().int().min(0),
+});
+export type ZodWashoutInput = z.infer<typeof ZodWashoutSchema>;
+
 export const ZodPatientProfileSchema = z.object({
   age_years: z.number().min(0).max(120).nullish(),
   sex: z.enum(["MALE", "FEMALE"]).nullish(),
@@ -29,6 +36,7 @@ export const ZodPatientProfileSchema = z.object({
   prior_therapies: z.array(z.string().trim().min(1)).default([]),
   treatment_naive: z.boolean().nullish(),
   labs: z.array(ZodLabSchema).default([]),
+  washouts: z.array(ZodWashoutSchema).default([]),
 });
 export type ZodPatientProfileInput = z.infer<typeof ZodPatientProfileSchema>;
 

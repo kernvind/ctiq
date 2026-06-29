@@ -130,6 +130,56 @@ def test_prior_therapy_required_absent_from_incomplete_list_is_uncertain():
     assert _verdict(c, PatientProfile(prior_therapies=["radiotherapy"])) is Verdict.UNCERTAIN
 
 
+# ── washout / temporal (ROADMAP 6b) ───────────────────────────────────────────
+def _washout_crit(**pred):
+    base = {"therapy_class": "chemotherapy", "relation": "prohibited", "washout_days": 21}
+    base.update(pred)
+    return _crit(category="prior_therapy", criterion_type="exclusion", predicate=base)
+
+
+def test_washout_inside_window_fails():
+    # "no chemotherapy within 21 days"; last dose 10 days ago → still inside the window.
+    c = _washout_crit()
+    assert _verdict(c, PatientProfile(washouts={"chemotherapy": 10})) is Verdict.FAIL
+
+
+def test_washout_outside_window_passes():
+    c = _washout_crit()
+    assert _verdict(c, PatientProfile(washouts={"chemotherapy": 30})) is Verdict.PASS
+
+
+def test_washout_boundary_equal_passes():
+    # Exactly at the window edge counts as cleared (>= boundary).
+    c = _washout_crit()
+    assert _verdict(c, PatientProfile(washouts={"chemotherapy": 21})) is Verdict.PASS
+
+
+def test_washout_matches_by_substring():
+    # The patient's washout key may be more specific than the criterion's therapy_class.
+    c = _washout_crit()
+    assert _verdict(c, PatientProfile(washouts={"platinum chemotherapy": 30})) is Verdict.PASS
+
+
+def test_washout_received_but_timing_unknown_is_uncertain():
+    # Key win: received (in prior_therapies) but no days-since → honest UNCERTAIN, not the old
+    # conservative FAIL — we can't tell whether the patient is past the window.
+    c = _washout_crit()
+    assert _verdict(c, PatientProfile(prior_therapies=["chemotherapy"])) is Verdict.UNCERTAIN
+
+
+def test_washout_treatment_naive_passes():
+    # Never received → the window is trivially satisfied even without timing.
+    c = _washout_crit()
+    assert _verdict(c, PatientProfile(treatment_naive=True)) is Verdict.PASS
+
+
+def test_washout_required_relation_is_inverted():
+    # "must have had radiotherapy within 21 days": recent enough → PASS, too long ago → FAIL.
+    c = _washout_crit(therapy_class="radiotherapy", relation="required")
+    assert _verdict(c, PatientProfile(washouts={"radiotherapy": 10})) is Verdict.PASS
+    assert _verdict(c, PatientProfile(washouts={"radiotherapy": 30})) is Verdict.FAIL
+
+
 # ── no predicate / non-actionable ─────────────────────────────────────────────
 def test_no_predicate_is_not_evaluated():
     c = _crit(category="comorbidity", predicate=None)
@@ -200,3 +250,19 @@ def test_rank_matches_orders_eligible_first_excluded_last():
     assert ranked[0].signal is TrialSignal.LIKELY_ELIGIBLE and ranked[0].has_criteria
     assert ranked[1].signal is TrialSignal.POSSIBLE and ranked[1].has_criteria is False
     assert ranked[2].signal is TrialSignal.LIKELY_EXCLUDED
+
+
+def test_rank_matches_surfaces_blockers_on_excluded_only():
+    candidates = [{"nct_id": "NCT-EXCL"}, {"nct_id": "NCT-ELIG"}]
+    criteria_by_nct = {
+        "NCT-ELIG": [_crit(category="performance_status", predicate=_ecog(0, 1))],  # pass
+        "NCT-EXCL": [_crit(category="demographic", predicate={"min": 18})],         # fail (age 12)
+    }
+    profile = PatientProfile(ecog=1, age_years=12)
+    by_nct = {m.nct_id: m for m in rank_matches(candidates, criteria_by_nct, profile)}
+
+    # The excluded trial carries its FAIL verdict(s) inline as blockers (the "why").
+    assert [b.verdict for b in by_nct["NCT-EXCL"].blockers] == [Verdict.FAIL]
+    assert by_nct["NCT-EXCL"].blockers[0].category == "demographic"
+    # An eligible trial has no blockers.
+    assert by_nct["NCT-ELIG"].blockers == []

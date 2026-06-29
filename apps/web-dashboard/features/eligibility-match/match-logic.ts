@@ -10,12 +10,15 @@ export type ProfileForm = {
   treatmentNaive: boolean;
   biomarkers: Pair[];
   priorTherapies: string[];
+  // event keyword (key) -> days since it last occurred (value, as text). Feeds washout matching.
+  washouts: Pair[];
 };
 
 /**
  * Map the match form's raw string inputs into the PatientProfile sent to the matcher.
  * Pure so it can be unit-tested: blanks → null, numeric fields parsed, and empty
- * biomarker/therapy rows dropped (trimmed).
+ * biomarker/therapy/washout rows dropped (trimmed). Washout rows also require a
+ * non-negative integer day count (anything else is dropped, never sent as NaN).
  */
 export function buildProfile(form: ProfileForm) {
   return {
@@ -29,6 +32,13 @@ export function buildProfile(form: ProfileForm) {
       .map((b) => ({ marker: b.key.trim(), value: b.value.trim() })),
     prior_therapies: form.priorTherapies.map((t) => t.trim()).filter(Boolean),
     labs: [],
+    washouts: form.washouts
+      // Drop blank event/value BEFORE Number() — Number("") is 0 (not NaN), which would
+      // otherwise sneak an empty row through as days_since: 0.
+      .map((w) => ({ event: w.key.trim(), value: w.value.trim() }))
+      .filter((w) => w.event && w.value !== "")
+      .map((w) => ({ event: w.event, days_since: Number(w.value) }))
+      .filter((w) => Number.isInteger(w.days_since) && w.days_since >= 0),
   };
 }
 
@@ -49,6 +59,17 @@ export const SIGNAL_ORDER: TrialSignal[] = [
  */
 export function isAssessable(t: MatchedTrial): boolean {
   return t.n_pass + t.n_fail + t.n_uncertain > 0;
+}
+
+/**
+ * How many of a trial's actionable criteria the matcher could actually evaluate, vs the total.
+ * `checked` = pass + fail + uncertain; `total` adds the prose criteria it couldn't assess.
+ * Surfacing this ("8 of 12 checked") turns our honesty about coverage into a trust signal —
+ * a clinician weighs a verdict differently when they know how much of it was machine-checked.
+ */
+export function criterionCoverage(t: MatchedTrial): { checked: number; total: number } {
+  const checked = t.n_pass + t.n_fail + t.n_uncertain;
+  return { checked, total: checked + t.n_not_evaluated };
 }
 
 /** Bucket the *assessable* trials by signal in display order, dropping empty buckets. */

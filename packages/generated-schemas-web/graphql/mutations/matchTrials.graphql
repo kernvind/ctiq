@@ -5,6 +5,13 @@ mutation matchTrials_mutation($condition: String!, $profile: PatientProfileInput
     recruitingOnly: $recruitingOnly
     topK: $topK
   ) {
+    blockers {
+      category
+      criterion_type
+      reason
+      text
+      verdict
+    }
     brief_title
     conditions
     has_criteria

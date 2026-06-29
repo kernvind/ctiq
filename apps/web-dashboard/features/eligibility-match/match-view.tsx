@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/eligibility-match/actions";
 import {
   buildProfile,
+  criterionCoverage,
   groupBySignal,
   isAssessable,
   unassessedTrials,
@@ -47,6 +48,7 @@ export function MatchView() {
   const [treatmentNaive, setTreatmentNaive] = useState(false);
   const [biomarkers, setBiomarkers] = useState<Pair[]>([]);
   const [priorTherapies, setPriorTherapies] = useState<string[]>([]);
+  const [washouts, setWashouts] = useState<Pair[]>([]);
 
   const [results, setResults] = useState<MatchedTrial[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function MatchView() {
     useState<ReturnType<typeof buildProfile> | null>(null);
 
   const currentProfile = () =>
-    buildProfile({ age, sex, ecog, stage, treatmentNaive, biomarkers, priorTherapies });
+    buildProfile({ age, sex, ecog, stage, treatmentNaive, biomarkers, priorTherapies, washouts });
 
   function onSubmit() {
     setError(null);
@@ -159,6 +161,15 @@ export function MatchView() {
           items={priorTherapies}
           setItems={setPriorTherapies}
           placeholder="e.g. checkpoint inhibitor"
+        />
+
+        {/* Washout timing — days since a therapy/event, for "within N days" criteria */}
+        <PairList
+          label="Days since last treatment"
+          pairs={washouts}
+          setPairs={setWashouts}
+          keyPlaceholder="chemotherapy"
+          valuePlaceholder="days, e.g. 14"
         />
 
         <label className="flex items-center gap-2 text-sm">
@@ -321,6 +332,7 @@ function TrialRow({
   trial: MatchedTrial; open: boolean; verdict: MatchResult | null | undefined;
   onToggle: () => void;
 }) {
+  const cov = criterionCoverage(trial);
   return (
     <div className="rounded-lg border bg-background">
       <button onClick={onToggle} className="flex w-full items-start gap-3 p-3 text-left">
@@ -331,12 +343,19 @@ function TrialRow({
             {trial.nct_id} · {trial.overall_status ?? "—"}
             {trial.phases.length > 0 && ` · ${trial.phases.join(", ")}`}
           </p>
+          {/* Inline "why excluded" — the failing criterion, no drill-in needed. */}
+          {trial.blockers.length > 0 && (
+            <p className="mt-0.5 text-[11px] text-red-700">
+              Blocked: {trial.blockers[0].reason}
+              {trial.blockers.length > 1 && ` · +${trial.blockers.length - 1} more`}
+            </p>
+          )}
         </div>
         <span className="shrink-0 text-[11px] text-muted-foreground">
           {isAssessable(trial) ? (
             <>
               {trial.n_pass}✓ {trial.n_fail}✗ {trial.n_uncertain}?
-              {trial.n_not_evaluated > 0 && ` · ${trial.n_not_evaluated} for review`}
+              {cov.total > cov.checked && ` · ${cov.checked}/${cov.total} checked`}
             </>
           ) : trial.has_criteria ? (
             `${trial.n_not_evaluated} criteria · manual review`
@@ -355,24 +374,31 @@ function TrialRow({
               No structured eligibility extracted for this trial yet.
             </p>
           ) : (
-            <ul className="flex flex-col gap-1.5">
-              {verdict.verdicts.map((v: CriterionVerdict, i: number) => {
-                const meta = VERDICT_META[v.verdict];
-                return (
-                  <li key={i} className="flex gap-2 text-xs">
-                    <span
-                      className={`mt-0.5 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium ${meta?.cls ?? ""}`}
-                    >
-                      {meta?.label ?? v.verdict}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span>{v.text}</span>
-                      <span className="block text-[11px] text-muted-foreground">{v.reason}</span>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <p className="mb-1.5 text-[11px] text-muted-foreground">
+                Machine-checked {cov.checked} of {cov.total} criteria
+                {cov.total > cov.checked &&
+                  ` · ${cov.total - cov.checked} need manual review`}
+              </p>
+              <ul className="flex flex-col gap-1.5">
+                {verdict.verdicts.map((v: CriterionVerdict, i: number) => {
+                  const meta = VERDICT_META[v.verdict];
+                  return (
+                    <li key={i} className="flex gap-2 text-xs">
+                      <span
+                        className={`mt-0.5 shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium ${meta?.cls ?? ""}`}
+                      >
+                        {meta?.label ?? v.verdict}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span>{v.text}</span>
+                        <span className="block text-[11px] text-muted-foreground">{v.reason}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
         </div>
       )}

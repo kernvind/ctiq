@@ -65,6 +65,23 @@ describe('EligibilityMatchService', () => {
       expect(out.age_years).toBe(65);
       expect(out.prior_therapies).toEqual(['chemotherapy']);
     });
+
+    it('folds washout pairs into a days-since dict', () => {
+      const out = map(
+        profile({
+          washouts: [
+            { event: 'chemotherapy', days_since: 14 },
+            { event: 'surgery', days_since: 60 },
+          ],
+        }),
+      );
+      expect(out.washouts).toEqual({ chemotherapy: 14, surgery: 60 });
+    });
+
+    it('defaults washouts to an empty dict when none are supplied', () => {
+      const out = map(profile({ washouts: undefined as never }));
+      expect(out.washouts).toEqual({});
+    });
   });
 
   describe('matchTrial', () => {

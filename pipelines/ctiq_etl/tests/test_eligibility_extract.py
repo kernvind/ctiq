@@ -55,6 +55,16 @@ def test_to_db_rows_dumps_predicate_dropping_nulls():
     assert row["predicate"] == {"marker": "EGFR", "relation": "excluded"}  # None fields gone
 
 
+def test_to_db_rows_serializes_washout_days_predicate():
+    # ROADMAP 6b: a prior_therapy washout window survives the predicate → JSONB round-trip.
+    items = [_crit(predicate=Predicate(therapy_class="chemotherapy", relation="prohibited",
+                                       washout_days=21))]
+    row = to_db_rows("NCT1", items, source_hash="h", ingestion_date=date(2026, 6, 24))[0]
+    assert row["predicate"] == {
+        "therapy_class": "chemotherapy", "relation": "prohibited", "washout_days": 21,
+    }
+
+
 def test_to_db_rows_strips_nul_inside_predicate_and_text():
     items = [_crit(text="a\x00b", predicate=Predicate(analyte="kg/m\x002", op=">=", value=1))]
     row = to_db_rows("NCT1", items, source_hash="h", ingestion_date=date(2026, 6, 24))[0]

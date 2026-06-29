@@ -131,6 +131,11 @@ type MatchResult {
 }
 
 type MatchedTrial {
+  """
+  The failing criteria (verdict=FAIL) behind a likely_excluded signal — the inline "why"
+  """
+  blockers: [CriterionVerdict!]!
+
   """Brief Title"""
   brief_title: String
   conditions: [String!]!
@@ -195,6 +200,9 @@ input PatientProfileInput {
   """
   stage: String
   treatment_naive: Boolean
+
+  """Days since prior therapies/events, for washout/temporal matching"""
+  washouts: [WashoutInput!]! = []
 }
 
 type Query {
@@ -421,4 +429,14 @@ enum Verdict {
   NOT_EVALUATED
   PASS
   UNCERTAIN
+}
+
+input WashoutInput {
+  """Days since the event last occurred"""
+  days_since: Int!
+
+  """
+  Therapy/event keyword, e.g. "chemotherapy", "surgery"
+  """
+  event: String!
 }

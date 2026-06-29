@@ -93,4 +93,10 @@ export class MatchedTrial {
     description: 'False when the trial has no extracted eligibility yet (signal defaults to possible)',
   })
   has_criteria!: boolean;
+
+  @Field(() => [CriterionVerdict], {
+    defaultValue: [],
+    description: 'The failing criteria (verdict=FAIL) behind a likely_excluded signal — the inline "why"',
+  })
+  blockers: CriterionVerdict[] = [];
 }

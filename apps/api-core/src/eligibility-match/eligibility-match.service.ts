@@ -104,6 +104,9 @@ export class EligibilityMatchService {
     const labs: Record<string, number> = {};
     for (const l of p.labs ?? []) labs[l.analyte] = l.value;
 
+    const washouts: Record<string, number> = {};
+    for (const w of p.washouts ?? []) washouts[w.event] = w.days_since;
+
     return {
       age_years: p.age_years ?? null,
       sex: p.sex ?? null,
@@ -113,6 +116,7 @@ export class EligibilityMatchService {
       prior_therapies: p.prior_therapies ?? [],
       treatment_naive: p.treatment_naive ?? null,
       labs,
+      washouts,
     };
   }
 

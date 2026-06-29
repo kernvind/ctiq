@@ -63,7 +63,7 @@ class Predicate(BaseModel):
       biomarker:           marker, qualifier, assay, op, value, unit, relation, unknown_status
       performance_status:  scale, min, max
       disease_stage:       stage, modifiers
-      prior_therapy:       therapy_class, relation, max_lines
+      prior_therapy:       therapy_class, relation, max_lines, washout_days
       demographic:         min, max, unit
       lab_value:           analyte, op, value, unit
     """
@@ -80,6 +80,7 @@ class Predicate(BaseModel):
     min: Optional[float] = None               # inclusive range low (e.g. ECOG/age)
     max: Optional[float] = None               # inclusive range high
     max_lines: Optional[int] = None           # prior_therapy line cap
+    washout_days: Optional[int] = None        # prior_therapy time window in days ("within 3 weeks" → 21)
     stage: Optional[list[str]] = None         # e.g. ["IV"], ["IIIA","IIIB"]
     modifiers: Optional[list[str]] = None     # e.g. ["metastatic","recurrent"]
     relation: Optional[Literal["required", "excluded", "allowed", "prohibited"]] = None
@@ -152,7 +153,9 @@ cannot ground in the text null); for ALL other categories set predicate to null:
 unknown_status ("eligible"/"excluded") when the text states how unknown/untested status is treated.
   * performance_status: scale (e.g. "ECOG") + min/max ("ECOG 0-1" -> min 0, max 1).
   * disease_stage: stage (e.g. ["IV"]) + modifiers (e.g. ["metastatic","recurrent"]).
-  * prior_therapy: therapy_class, relation ("prohibited"/"required"/"allowed"), max_lines if a line cap is stated.
+  * prior_therapy: therapy_class, relation ("prohibited"/"required"/"allowed"), max_lines if a line \
+cap is stated, and washout_days when a time window is given — convert to days ("within 3 weeks" → 21, \
+"within 28 days" → 28, "within 6 months" → 180). Only set it when the text states a window.
   * demographic: min/max + unit (age in "years").
   * lab_value: analyte + op + value + unit.
   Never invent values not present in the text."""
@@ -160,7 +163,7 @@ unknown_status ("eligible"/"excluded") when the text states how unknown/untested
 
 # Bump when the prompt or output schema changes so the source_hash gate re-extracts
 # everything instead of silently skipping (the hash is over the input blob, not the output).
-_EXTRACTOR_VERSION = "2-predicates"
+_EXTRACTOR_VERSION = "3-washout"
 
 
 def eligibility_source_hash(text: str) -> str:

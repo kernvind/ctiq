@@ -94,7 +94,7 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
   routes `Intent.PATIENT → (eligibility_inclusion, summary)` (inclusion only — cosine is
   sign-blind). Curated BQ tables auto-create from the parquet schema.
 
-### Eligibility matching (Clinician tier — ROADMAP step 6 v1) ✅
+### Eligibility matching (Clinician tier — ROADMAP step 6 + 6b) ✅
 - **Stateless patient↔trial matcher** — a never-persisted patient profile is evaluated
   in-request against the structured criteria (PHI gate honored). Pure logic, no LLM,
   labeled "decision support, not medical advice," **clinician-only** (`@Roles(CLINICIAN)`).
@@ -103,23 +103,41 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
   `POST /api/v1/match/trials/{nct_id}` (full criterion-by-criterion verdicts — the "Why?"
   drill-in). Per-criterion verdict (pass/fail/uncertain/not-evaluated) → trial signal
   (likely-eligible / possible / likely-excluded).
+- **Washout / temporal matching (6b)** ✅ — `prior_therapy` predicates now carry
+  `washout_days` ("within 3 weeks" → 21, extracted by the LLM); the patient profile carries a
+  `washouts` days-since map; the evaluator resolves windowed criteria directly — enough time
+  elapsed → PASS, still inside the window → FAIL, `required` inverted. A matched-but-untimed
+  therapy now returns an **honest UNCERTAIN** instead of the old conservative FAIL. Threaded
+  through every layer (extraction predicate + prompt, inference schema/evaluator, GraphQL
+  `WashoutInput` + zod, web "days since last treatment" form). `_EXTRACTOR_VERSION` → `3-washout`.
+- **Match UX refinements** — ranked list now splits trials the matcher *couldn't assess*
+  (no structured eligibility, or prose-only) into a distinct "Not enough data to assess" group
+  instead of disguising them as "Possible"; the matched profile is snapshotted so drill-in
+  verdicts can't drift from the bucket label; submit/drill-in loading states decoupled.
+- **Explanation depth (sharpen #2)** — each trial shows **match completeness** ("machine-checked
+  8 of 12 criteria") derived from the verdict counts, and **likely-excluded trials surface the
+  failing criterion inline** ("Blocked: ECOG 2 vs required [0,1]") via a new
+  `MatchedTrial.blockers` (the FAIL verdicts `rank_matches` already computes, reusing
+  `CriterionVerdict`) — the "why" on the ranked list without a per-trial drill-in.
 - **Wired:** inference (evaluator + repository + services + router) → api-core (service +
   resolver, zod) → web (actions + `MatchView`, role-gated nav desktop + mobile).
-- **Known gaps:** no temporal/washout evaluation yet (windowed criteria → UNCERTAIN by
-  design); fixed a false-PASS where prior-therapy absence from an incomplete list was read
-  as a confident negative. Next slice: **washout/temporal matching** (ROADMAP 6b).
+- **Known gaps:** time-window evaluation needs the physician to supply days-since (no patient
+  timing → UNCERTAIN); surgery/prior-trial events still bucket under `prior_therapy` (taxonomy
+  split deferred); days-since is integer-only (no date input yet).
 
 ---
 
 ## In flight / next
 
-1. **Eligibility re-embed backfill (finish Stage A rollout)** — run migrations `0005`/`0006`,
-   set ETL `OPENAI_API_KEY`, then a full re-embed so stale single-chunk `eligibility`
-   vectors are dropped and the two new field types populate (replace-by-nct_id only swaps a
-   trial's vectors when it's re-embedded).
-2. **Washout / temporal matching (ROADMAP 6b)** — the next eligibility slice: `washout_days`
-   predicate + a patient timing field + window-aware evaluator, so "within N weeks" criteria
-   stop defaulting to UNCERTAIN. Plus split surgery/prior-trial events out of `prior_therapy`.
+1. **Eligibility re-embed + washout backfill (finish Stage A rollout)** — run migrations
+   `0005`/`0006`, set ETL `OPENAI_API_KEY`, then a full re-extract + re-embed. The
+   `_EXTRACTOR_VERSION` → `3-washout` bump invalidates all eligibility `source_hash`es, so this
+   also backfills `washout_days` predicates; stale single-chunk `eligibility` vectors are
+   dropped and the two new field types populate (replace-by-nct_id only swaps a trial's vectors
+   when it's re-embedded). Until this runs, washout matching has no predicates to act on.
+2. **Washout follow-ups (ROADMAP 6b tail)** — split surgery/prior-trial events out of the
+   `prior_therapy` category (their own taxonomy + evaluator dispatch), and add date-based
+   timing input (compute days-since) alongside today's integer days-since.
 3. **Change-event capture (ROADMAP NOW #2)** — diff-on-upsert into a new
    `trial_change_events` model so the compounding "change intelligence" moat starts
    accumulating. Cheap, time-sensitive (history is destroyed on every re-ingest today),
@@ -152,13 +170,13 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
 
 | Suite | Result |
 |---|---|
-| api-core (Jest, unit) | 85 passed (+ eligibility-match service 7 / resolver 3) |
+| api-core (Jest, unit) | 87 passed (+ eligibility-match service 9 [washout fold] / resolver 3) |
 | api-core integration (`session.int-spec`, Testcontainers) | 5 passed |
 | api-core auth e2e (full app + Postgres) | all checks passed (+ 3 clinician-gating checks) |
-| web-dashboard (Vitest) | 123 passed (+ nav-links, match-logic, un-orphaned auth-actions) |
-| inference-service (pytest, unit) | 104 passed (+ evaluator 24, match router 6) |
+| web-dashboard (Vitest) | 131 passed (+ match-logic washout/assessability/coverage, match logger) |
+| inference-service (pytest, unit) | 112 passed (+ evaluator 32 [washout + blockers], match router 6) |
 | inference-service integration (pgvector, Docker) | 15 passed (+ eligibility repository 5) |
-| ETL `ctiq_etl` (pytest, unit) | 32 passed (suite bootstrapped this cycle; `make test-etl`) |
+| ETL `ctiq_etl` (pytest, unit) | 35 passed (+ washout predicate round-trip; `make test-etl`) |
 
 ---
 

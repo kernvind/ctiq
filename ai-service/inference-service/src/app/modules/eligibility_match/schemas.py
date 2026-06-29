@@ -36,6 +36,10 @@ class PatientProfile(BaseModel):
     prior_therapies: list[str] = Field(default_factory=list)  # therapy classes received
     treatment_naive: Optional[bool] = None
     labs: dict[str, float] = Field(default_factory=dict)  # analyte -> value
+    # therapy/event keyword -> days since it last occurred (e.g. {"chemotherapy": 14}). Feeds
+    # washout/temporal evaluation: "no X within N days" needs the elapsed time, not just that
+    # X was received. Keys are matched to a criterion's therapy_class by substring (see evaluator).
+    washouts: dict[str, int] = Field(default_factory=dict)
 
 
 class CriterionVerdict(BaseModel):
@@ -76,6 +80,10 @@ class MatchedTrial(BaseModel):
     # False when the trial has no extracted eligibility yet — signal defaults to POSSIBLE,
     # so the UI can show "not enough structured data" rather than a real "possible".
     has_criteria: bool
+    # The FAIL verdicts that drove a likely_excluded signal — the "single blocker(s)" so the UI
+    # can say *why* inline ("Excluded: ECOG 2 vs required [0,1]") without a drill-in round-trip.
+    # Empty unless the trial failed at least one criterion. Verdict is always FAIL here.
+    blockers: list[CriterionVerdict] = Field(default_factory=list)
 
 
 class PatientMatchRequest(BaseModel):

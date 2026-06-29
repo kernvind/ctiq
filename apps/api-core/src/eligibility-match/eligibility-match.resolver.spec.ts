@@ -3,7 +3,13 @@ import { EligibilityMatchResolver } from './eligibility-match.resolver';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import type { PatientProfileInput } from '@repo/graphql-types';
 
-const profile = { ecog: 1, biomarkers: [], prior_therapies: [], labs: [] } as PatientProfileInput;
+const profile = {
+  ecog: 1,
+  biomarkers: [],
+  prior_therapies: [],
+  labs: [],
+  washouts: [],
+} as PatientProfileInput;
 
 describe('EligibilityMatchResolver', () => {
   let resolver: EligibilityMatchResolver;

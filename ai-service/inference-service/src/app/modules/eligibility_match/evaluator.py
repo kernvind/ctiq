@@ -142,6 +142,18 @@ _DISPATCH = {
 }
 
 
+def _washout_days_since(cls: Optional[str], p: PatientProfile) -> Optional[int]:
+    """Days since the patient last received `cls`, looked up in `washouts` by the same
+    substring match used for prior_therapies (keeps the therapy vocab matching consistent)."""
+    if not cls:
+        return None
+    needle = cls.lower()
+    for event, days in p.washouts.items():
+        if needle in event.lower():
+            return days
+    return None
+
+
 def _eval_prior_therapy(pred: dict, p: PatientProfile, criterion_type: str) -> tuple[Verdict, str]:
     """Prior therapy keys off `relation` (prohibited/required), not just polarity.
 
@@ -155,17 +167,38 @@ def _eval_prior_therapy(pred: dict, p: PatientProfile, criterion_type: str) -> t
     trials), which would never appear under "prior therapies" anyway. (A false PASS could
     clear an ineligible patient; UNCERTAIN surfaces it for review instead.)
 
-    NB: time-window washouts ("within 3 weeks") are still not truly evaluated — that needs
-    a washout predicate + patient timing (ROADMAP). Until then a matched class yields a
-    conservative FAIL on the criterion, and an unconfirmed one yields UNCERTAIN.
+    Washout (ROADMAP 6b): when the predicate carries `washout_days` (a "within N days" window)
+    AND the patient supplied a days-since for the class, we evaluate the window directly —
+    prohibited: enough time elapsed (days_since >= window) → PASS, still inside → FAIL;
+    `required` is the inverse (must have occurred within the window). When the class was
+    received but timing is unknown, we return UNCERTAIN (an honest unknown) instead of the old
+    conservative FAIL, since we genuinely can't tell whether the patient is past the window.
     """
     cls = pred.get("therapy_class")
     relation = pred.get("relation")
+    washout_days = pred.get("washout_days")
+
     received: Optional[bool] = None
     if cls and any(cls.lower() in t.lower() for t in p.prior_therapies):
         received = True
     elif p.treatment_naive is True:
         received = False
+
+    # Windowed criterion with patient timing → evaluate the window directly.
+    if washout_days is not None:
+        days_since = _washout_days_since(cls, p)
+        if days_since is not None:
+            reason = f"prior {cls!r} {days_since}d ago vs {washout_days}d washout (relation={relation})"
+            if relation == "required":
+                return (Verdict.PASS if days_since <= washout_days else Verdict.FAIL), reason
+            return (Verdict.PASS if days_since >= washout_days else Verdict.FAIL), reason
+        if received is True:
+            # Received, but we don't know when — can't place them inside/outside the window.
+            return Verdict.UNCERTAIN, (
+                f"prior {cls!r} received but timing unknown (within {washout_days}d window?)"
+            )
+        # Never received (treatment-naive) → the window is trivially satisfied.
+
     reason = f"prior {cls!r} received={received} (relation={relation})"
     if received is None:
         return Verdict.UNCERTAIN, reason
@@ -268,6 +301,9 @@ def rank_matches(
                 n_pass=res.n_pass, n_fail=res.n_fail,
                 n_uncertain=res.n_uncertain, n_not_evaluated=res.n_not_evaluated,
                 has_criteria=bool(crits),
+                # Surface the failing criteria inline so the ranked list can explain an
+                # exclusion without a per-trial drill-in.
+                blockers=[v for v in res.verdicts if v.verdict == Verdict.FAIL],
             )
         )
     matched.sort(key=lambda m: (_SIGNAL_PRIORITY[m.signal], m.n_fail, -m.n_pass))

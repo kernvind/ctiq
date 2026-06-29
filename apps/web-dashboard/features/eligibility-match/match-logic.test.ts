@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { MatchedTrial, TrialSignal } from "@repo/generated-schemas-web";
 import {
   buildProfile,
+  criterionCoverage,
   groupBySignal,
   isAssessable,
   unassessedTrials,
@@ -16,6 +17,7 @@ const EMPTY_FORM: ProfileForm = {
   treatmentNaive: false,
   biomarkers: [],
   priorTherapies: [],
+  washouts: [],
 };
 
 describe("buildProfile", () => {
@@ -52,6 +54,28 @@ describe("buildProfile", () => {
     const p = buildProfile({ ...EMPTY_FORM, priorTherapies: [" osimertinib ", "  ", ""] });
     expect(p.prior_therapies).toEqual(["osimertinib"]);
   });
+
+  it("maps washout rows to {event, days_since}, trimming the event", () => {
+    const p = buildProfile({
+      ...EMPTY_FORM,
+      washouts: [{ key: " chemotherapy ", value: "14" }],
+    });
+    expect(p.washouts).toEqual([{ event: "chemotherapy", days_since: 14 }]);
+  });
+
+  it("drops washout rows with a blank event or a non-integer/negative day count", () => {
+    const p = buildProfile({
+      ...EMPTY_FORM,
+      washouts: [
+        { key: "surgery", value: "60" }, // valid
+        { key: "", value: "30" }, // blank event → dropped
+        { key: "radiation", value: "" }, // blank days → NaN → dropped
+        { key: "chemo", value: "1.5" }, // non-integer → dropped
+        { key: "trial", value: "-5" }, // negative → dropped
+      ],
+    });
+    expect(p.washouts).toEqual([{ event: "surgery", days_since: 60 }]);
+  });
 });
 
 // Default counts make a trial *assessable* (n_pass:1); pass `counts` to override — e.g. all
@@ -79,6 +103,7 @@ const trial = (
     phases: [],
     conditions: [],
     lead_sponsor_name: null,
+    blockers: [],
     ...counts,
   }) as MatchedTrial;
 
@@ -93,6 +118,22 @@ describe("isAssessable", () => {
     expect(
       isAssessable(trial("B", "POSSIBLE", { n_pass: 0, n_not_evaluated: 3 })),
     ).toBe(false);
+  });
+});
+
+describe("criterionCoverage", () => {
+  it("counts checked (pass+fail+uncertain) vs total (incl. not-evaluated)", () => {
+    const cov = criterionCoverage(
+      trial("A", "POSSIBLE", { n_pass: 5, n_fail: 2, n_uncertain: 1, n_not_evaluated: 4 }),
+    );
+    expect(cov).toEqual({ checked: 8, total: 12 });
+  });
+
+  it("reports full coverage when nothing is left unevaluated", () => {
+    const cov = criterionCoverage(
+      trial("A", "LIKELY_ELIGIBLE", { n_pass: 3, n_not_evaluated: 0 }),
+    );
+    expect(cov).toEqual({ checked: 3, total: 3 });
   });
 });
 

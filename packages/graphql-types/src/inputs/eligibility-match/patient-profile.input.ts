@@ -30,6 +30,19 @@ export class LabInput {
 }
 
 @InputType()
+export class WashoutInput {
+  @IsString()
+  @Field(() => String, {
+    description: 'Therapy/event keyword, e.g. "chemotherapy", "surgery"',
+  })
+  event!: string;
+
+  @IsInt()
+  @Field(() => Int, { description: 'Days since the event last occurred' })
+  days_since!: number;
+}
+
+@InputType()
 export class PatientProfileInput {
   @IsOptional()
   @IsNumber()
@@ -67,4 +80,11 @@ export class PatientProfileInput {
   @IsArray()
   @Field(() => [LabInput], { defaultValue: [] })
   labs: LabInput[] = [];
+
+  @IsArray()
+  @Field(() => [WashoutInput], {
+    defaultValue: [],
+    description: 'Days since prior therapies/events, for washout/temporal matching',
+  })
+  washouts: WashoutInput[] = [];
 }
