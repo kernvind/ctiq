@@ -4,7 +4,7 @@ Living source of truth for what's built, what's in flight, and how to deploy it.
 Maintained in the repo (versioned) because the product-engineering skill's backlog is a
 read-only cache that doesn't persist across sessions.
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-28
 
 ---
 
@@ -80,17 +80,51 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
   filter-stripped `semantic_query` (falling back to the raw query when it's empty), so
   "phase 3 Pfizer" no longer pollutes the vector match — the slice-3 quick win, done.
 
+### Structured eligibility (Asset 1 — flagship IP) — Stage A shipped
+- **Per-criterion extraction** — the `eligibility_criteria` blob is split + classified into
+  `trial_eligibility_criteria` rows (`criterion_type`, `category` [13-way taxonomy], verbatim
+  `text`, `confidence`, `is_actionable`, `source_bullet_index`, `display_order`,
+  version-salted `source_hash`), with a nullable Stage-B `predicate` JSONB for the enumerable
+  categories. LLM structured outputs (`responses.parse`, `gpt-5-mini`). Migration `0005`.
+- **Two extraction modes** — inline (ThreadPool concurrency) and **OpenAI Batch API**
+  (~50% cheaper, async submit/poll via a persisted `eligibility_batch_jobs` table,
+  migration `0006`). `nct_id` rides `custom_id`; never routed through the LLM.
+- **Per-item embeddings** — each actionable item embedded as `eligibility_inclusion` /
+  `eligibility_exclusion` (`chunk_id = display_order` links the vector to its row); planner
+  routes `Intent.PATIENT → (eligibility_inclusion, summary)` (inclusion only — cosine is
+  sign-blind). Curated BQ tables auto-create from the parquet schema.
+
+### Eligibility matching (Clinician tier — ROADMAP step 6 v1) ✅
+- **Stateless patient↔trial matcher** — a never-persisted patient profile is evaluated
+  in-request against the structured criteria (PHI gate honored). Pure logic, no LLM,
+  labeled "decision support, not medical advice," **clinician-only** (`@Roles(CLINICIAN)`).
+- **Two endpoints:** patient-first `POST /api/v1/match/trials` (rank recruiting candidates
+  for a condition+profile — backs `/dashboard/match`) and per-trial
+  `POST /api/v1/match/trials/{nct_id}` (full criterion-by-criterion verdicts — the "Why?"
+  drill-in). Per-criterion verdict (pass/fail/uncertain/not-evaluated) → trial signal
+  (likely-eligible / possible / likely-excluded).
+- **Wired:** inference (evaluator + repository + services + router) → api-core (service +
+  resolver, zod) → web (actions + `MatchView`, role-gated nav desktop + mobile).
+- **Known gaps:** no temporal/washout evaluation yet (windowed criteria → UNCERTAIN by
+  design); fixed a false-PASS where prior-therapy absence from an incomplete list was read
+  as a confident negative. Next slice: **washout/temporal matching** (ROADMAP 6b).
+
 ---
 
 ## In flight / next
 
-1. **Change-event capture (ROADMAP NOW #2)** — diff-on-upsert into a new
+1. **Eligibility re-embed backfill (finish Stage A rollout)** — run migrations `0005`/`0006`,
+   set ETL `OPENAI_API_KEY`, then a full re-embed so stale single-chunk `eligibility`
+   vectors are dropped and the two new field types populate (replace-by-nct_id only swaps a
+   trial's vectors when it's re-embedded).
+2. **Washout / temporal matching (ROADMAP 6b)** — the next eligibility slice: `washout_days`
+   predicate + a patient timing field + window-aware evaluator, so "within N weeks" criteria
+   stop defaulting to UNCERTAIN. Plus split surgery/prior-trial events out of `prior_therapy`.
+3. **Change-event capture (ROADMAP NOW #2)** — diff-on-upsert into a new
    `trial_change_events` model so the compounding "change intelligence" moat starts
    accumulating. Cheap, time-sensitive (history is destroyed on every re-ingest today),
    independent of the search path.
-2. **Structured eligibility extraction (ROADMAP NEXT #3)** — the flagship IP: split
-   eligibility prose into `trial_eligibility_criteria` + per-item embeddings. Largest lift.
-3. **Compare selection UX polish**, **scheduled agent monitoring** (move landscape
+4. **Compare selection UX polish**, **scheduled agent monitoring** (move landscape
    monitoring from on-view to a cron + activity-feed digest — needs a scheduler),
    **BigQuery analytics** (trend/aggregate CI — no live read path yet), and the
    **AI tier** (summaries, eligibility help, chat — registered users).
@@ -114,16 +148,17 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
 
 ---
 
-## Test status (all green as of 2026-06-24)
+## Test status (all green as of 2026-06-28)
 
 | Suite | Result |
 |---|---|
-| api-core (Jest, unit) | 75 passed |
+| api-core (Jest, unit) | 85 passed (+ eligibility-match service 7 / resolver 3) |
 | api-core integration (`session.int-spec`, Testcontainers) | 5 passed |
-| api-core auth e2e (full app + Postgres) | all checks passed |
-| web-dashboard (Vitest) | 100 passed |
-| inference-service (pytest, unit) | 74 passed (+9 slice-3 planner/service) |
-| inference-service integration (pgvector, Docker) | 10 passed (+4 slice-3 filters) |
+| api-core auth e2e (full app + Postgres) | all checks passed (+ 3 clinician-gating checks) |
+| web-dashboard (Vitest) | 123 passed (+ nav-links, match-logic, un-orphaned auth-actions) |
+| inference-service (pytest, unit) | 104 passed (+ evaluator 24, match router 6) |
+| inference-service integration (pgvector, Docker) | 15 passed (+ eligibility repository 5) |
+| ETL `ctiq_etl` (pytest, unit) | 32 passed (suite bootstrapped this cycle; `make test-etl`) |
 
 ---
 
@@ -132,9 +167,17 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
 - **Pending Prisma migrations** to run on the next deploy (in order):
   `20260622000000_user_remove_username`, `20260622010000_saved_trials`,
   `20260622020000_landscapes`.
+- **Pending Alembic (`ctiq-db`, `trials` schema) migrations:** `0005` (trial eligibility
+  criteria) and `0006` (eligibility batch jobs). Run before the eligibility ETL/matcher path.
 - **inference-service needs `OPENAI_API_KEY`** in its prod env to activate the LLM
   planner; without it the service cleanly falls back to the rule-based planner. The
   `openai` dependency is declared in `pyproject.toml`.
+- **ETL needs `OPENAI_API_KEY`** to run eligibility extraction (auto-skips without it).
+  After deploy, run the **re-embed backfill** to drop stale `eligibility` chunks and
+  populate `eligibility_inclusion`/`eligibility_exclusion`.
+- **api-core ↔ inference match path:** the eligibility-match endpoints are reached via the
+  existing internal-token HTTP client; deploy inference + api-core + web as a set (new
+  GraphQL `matchTrials`/`matchTrial` contract).
 - **Deploy services as a set** when a GraphQL/HTTP contract changed together (e.g. the
   raw-age fields touched inference + api-core + web; `me`/saved-trials/landscapes added
   schema). Nullable/additive fields mean no hard ordering, but the feature only lights up

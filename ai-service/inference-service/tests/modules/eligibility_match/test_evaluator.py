@@ -113,6 +113,23 @@ def test_prior_therapy_unknown_is_uncertain():
     assert _verdict(c, PatientProfile()) is Verdict.UNCERTAIN
 
 
+def test_prior_therapy_prohibited_absent_from_incomplete_list_is_uncertain():
+    # Regression: the class isn't in prior_therapies, the list is non-empty, and the patient
+    # isn't treatment-naive. Absence from a free-text list is NOT proof it never happened
+    # (esp. washout/event criteria) — must be UNCERTAIN, never a falsely confident PASS.
+    c = _crit(category="prior_therapy",
+              predicate={"therapy_class": "anti-tumor clinical trial", "relation": "prohibited"})
+    assert _verdict(c, PatientProfile(prior_therapies=["major surgery"])) is Verdict.UNCERTAIN
+
+
+def test_prior_therapy_required_absent_from_incomplete_list_is_uncertain():
+    # Same logic for required-prior-therapy: not finding it in an incomplete list is unknown,
+    # not a confident FAIL.
+    c = _crit(category="prior_therapy",
+              predicate={"therapy_class": "platinum chemotherapy", "relation": "required"})
+    assert _verdict(c, PatientProfile(prior_therapies=["radiotherapy"])) is Verdict.UNCERTAIN
+
+
 # ── no predicate / non-actionable ─────────────────────────────────────────────
 def test_no_predicate_is_not_evaluated():
     c = _crit(category="comorbidity", predicate=None)

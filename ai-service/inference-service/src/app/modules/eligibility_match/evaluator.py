@@ -143,15 +143,28 @@ _DISPATCH = {
 
 
 def _eval_prior_therapy(pred: dict, p: PatientProfile, criterion_type: str) -> tuple[Verdict, str]:
-    """Prior therapy keys off `relation` (prohibited/required), not just polarity."""
+    """Prior therapy keys off `relation` (prohibited/required), not just polarity.
+
+    A *confident* received/not-received is asserted only from explicit evidence:
+      - the therapy class appears in the patient's prior_therapies → received=True
+      - the patient is treatment-naive                            → received=False
+    Crucially, the class simply being ABSENT from a (free-text, possibly incomplete)
+    prior_therapies list is NOT proof the patient never had it — so we stay UNCERTAIN
+    rather than emitting a falsely confident PASS on a prohibited exclusion. This matters
+    most for washout/event criteria the extractor mis-buckets here (recent surgery, other
+    trials), which would never appear under "prior therapies" anyway. (A false PASS could
+    clear an ineligible patient; UNCERTAIN surfaces it for review instead.)
+
+    NB: time-window washouts ("within 3 weeks") are still not truly evaluated — that needs
+    a washout predicate + patient timing (ROADMAP). Until then a matched class yields a
+    conservative FAIL on the criterion, and an unconfirmed one yields UNCERTAIN.
+    """
     cls = pred.get("therapy_class")
     relation = pred.get("relation")
-    received = None
+    received: Optional[bool] = None
     if cls and any(cls.lower() in t.lower() for t in p.prior_therapies):
         received = True
     elif p.treatment_naive is True:
-        received = False
-    elif p.prior_therapies:  # has a (different) therapy list but not this class
         received = False
     reason = f"prior {cls!r} received={received} (relation={relation})"
     if received is None:

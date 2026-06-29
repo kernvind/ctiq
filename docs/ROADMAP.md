@@ -6,7 +6,7 @@ How the three defensible assets get built on top of the **current** schema
 is the forward plan organized around *what makes the product defensible*, not just the
 next ticket.
 
-**Last updated:** 2026-06-24
+**Last updated:** 2026-06-28
 
 ---
 
@@ -211,13 +211,57 @@ explanation, step 6) — diagnosis, stage, biomarker, prior-therapy, and ECOG al
 
 ### LATER — depth and scale (each carries a named dependency)
 
-**6. Guided eligibility matching (Asset 1 — the payoff).**
-Structured fields (`min_age_years`, `sex`, `healthy_volunteers`, `std_ages`) + parsed
-criteria from step 3 → a guided yes/no funnel and per-trial "you likely match / likely
-don't" signal.
-- **Dependency / gate:** if it stores any patient health profile, that's **new PHI** —
-  ctiq stores none today. Compliance review *before* building. A stateless,
-  nothing-persisted version sidesteps this and is the safer first cut.
+**6. Guided eligibility matching (Asset 1 — the payoff). ✅ v1 SHIPPED (2026-06-28).**
+Per-trial + patient-first matching of a (never-persisted) patient profile against the
+Stage-A/B criteria from step 3 → a per-criterion verdict (pass / fail / uncertain /
+not-evaluated) and a trial-level signal (likely-eligible / possible / likely-excluded).
+- **Stateless by design (PHI gate honored):** the profile is evaluated in-request and
+  never stored — the safer first cut the original dependency note called for. The matcher
+  is **pure logic, no LLM**, labeled "decision support, not medical advice," and
+  **clinician-only** (api-core RBAC `@Roles(CLINICIAN)`).
+- **Two entry points:**
+  - *Patient-first* `POST /api/v1/match/trials` — embed condition → vector-search
+    recruiting candidates → bulk-load criteria → rank (likely-eligible first). Backs the
+    `/dashboard/match` UI.
+  - *Per-trial* `POST /api/v1/match/trials/{nct_id}` — full criterion-by-criterion
+    verdicts for one trial; surfaced as the "Why?" drill-in on each ranked result.
+- **Wired end-to-end:** inference (evaluator + repository + services + router) → api-core
+  (service + resolver, zod-validated) → web (server actions + `MatchView`, role-gated nav
+  on desktop **and** mobile from a single `visibleNavLinks` source).
+- **Test coverage (test-first):** evaluator 24 unit, repository 5 pgvector-integration,
+  router 6, api-core service 7 + resolver 3 (incl. an RBAC-metadata lock), web actions +
+  `match-logic` 9, and a 3-check auth-e2e proving PATIENT→403 / CLINICIAN→pass-through.
+
+- **Known limitations / correctness notes (2026-06-28):**
+  - **No temporal/washout evaluation yet** — "within 3 weeks", "≥4 weeks since chemo" are
+    extracted as prose / `prior_therapy` but the *window* is dropped, so a washout
+    exclusion can't be truly decided. → step **6b**.
+  - **Fixed a false PASS:** prior-therapy no longer infers "not received" from a class
+    merely being *absent* from the patient's (incomplete, free-text) prior-therapy list —
+    that now returns **UNCERTAIN**, not a confidently-wrong PASS. Only an explicit match or
+    `treatment_naive=True` yields a confident verdict. A false PASS could clear an
+    ineligible patient; conservative FAIL/UNCERTAIN is the safe direction for decision support.
+  - **Taxonomy mis-bucketing:** non-therapy washout *events* (recent major surgery, prior
+    trial participation) get classified `prior_therapy` and ride its substring match; they
+    need their own handling (6b).
+  - **Smaller follow-ups:** a trial-detail "Check a patient against this trial" entry point
+    (reach the per-trial endpoint without a patient-first search), and an RTL render test
+    for `MatchView` (logic is extracted + unit-tested; the render/interaction path isn't).
+
+**6b. Washout / temporal eligibility matching (Asset 1 — the next eligibility slice).**
+Make time-windowed criteria actually matchable instead of UNCERTAIN-by-default — the
+limitation step 6 surfaced. Washouts are everywhere in oncology eligibility, so this
+generalizes well beyond the two examples that exposed it.
+- **Extraction:** add a `washout_days` predicate field; teach the extractor to normalize
+  "within N weeks/months" → days and tag the event class; split surgery / prior-trial
+  *events* out of `prior_therapy` (new category or `subtype`). Bump `_EXTRACTOR_VERSION`
+  so the version-salted `source_hash` forces re-extraction.
+- **Profile (still PHI-light, in-request):** add a timing field (e.g.
+  `days_since_last_antitumor_therapy`) threaded GraphQL input → zod → web form →
+  `buildProfile`.
+- **Evaluator:** window check — inside window = FAIL, outside = PASS, timing unknown =
+  UNCERTAIN. Ships with evaluator + ETL + web unit tests.
+- *No new model (predicate is JSONB). No persisted PHI.*
 
 **7. Sponsor entity resolution (Asset 3 — CI backbone).**
 - **New model(s) `sponsors` + `sponsor_aliases`** — resolve `lead_sponsor_name` variants
