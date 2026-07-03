@@ -1,0 +1,7 @@
+query portfolio_query {
+  portfolio {
+    createdAt
+    id
+    nctId
+  }
+}

@@ -3,9 +3,13 @@ import { HttpModule } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { EligibilityMatchService } from './eligibility-match.service';
 import { EligibilityMatchResolver } from './eligibility-match.resolver';
+import { PortfolioModule } from '../portfolio/portfolio.module';
 
 @Module({
   imports: [
+    // PortfolioModule exports PortfolioService — the screening resolver reads the user's
+    // open-trial NCT ids from it.
+    PortfolioModule,
     HttpModule.registerAsync({
       useFactory: (config: ConfigService) => ({
         baseURL: config.getOrThrow<string>('SEARCH_API_URL'),

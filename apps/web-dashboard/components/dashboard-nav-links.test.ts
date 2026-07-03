@@ -13,6 +13,13 @@ describe("visibleNavLinks", () => {
     }
   });
 
+  it("shows Portfolio Screening only to clinicians (site-payer wedge, same RBAC gate)", () => {
+    expect(labelsFor("CLINICIAN")).toContain("Portfolio Screening");
+    for (const role of ["PATIENT", "ANALYST", "ADMIN"] as Role[]) {
+      expect(labelsFor(role)).not.toContain("Portfolio Screening");
+    }
+  });
+
   it("shows Landscapes only to analysts", () => {
     expect(labelsFor("ANALYST")).toContain("Landscapes");
     for (const role of ["PATIENT", "CLINICIAN", "ADMIN"] as Role[]) {

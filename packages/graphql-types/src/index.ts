@@ -2,6 +2,7 @@ export * from "./enums/signup-role.enum";
 export * from "./enums/role.enum";
 export * from "./types/user/user.type";
 export * from "./types/user/saved-trial.type";
+export * from "./types/user/portfolio-trial.type";
 export * from "./types/landscape/landscape.type";
 export * from "./inputs/landscape/create-landscape.input";
 export * from "./inputs/user/login.input";

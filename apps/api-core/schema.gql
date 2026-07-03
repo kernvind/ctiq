@@ -168,6 +168,7 @@ type MatchingChunk {
 }
 
 type Mutation {
+  addPortfolioTrial(nctId: String!): PortfolioTrial!
   createLandscape(input: CreateLandscapeInput!): Landscape!
   deleteLandscape(id: ID!): Boolean!
   login(input: LoginInput!): AuthPayload!
@@ -176,7 +177,9 @@ type Mutation {
   matchTrial(nctId: String!, profile: PatientProfileInput!): MatchResult
   matchTrials(condition: String!, profile: PatientProfileInput!, recruitingOnly: Boolean = true, topK: Int = 50): [MatchedTrial!]!
   refresh(refreshToken: String!): AuthPayload!
+  removePortfolioTrial(nctId: String!): Boolean!
   saveTrial(nctId: String!): SavedTrial!
+  screenPortfolio(profile: PatientProfileInput!): [MatchedTrial!]!
   signup(input: SignupInput!): AuthPayload!
   unsaveTrial(nctId: String!): Boolean!
 }
@@ -205,10 +208,17 @@ input PatientProfileInput {
   washouts: [WashoutInput!]! = []
 }
 
+type PortfolioTrial {
+  createdAt: DateTime!
+  id: ID!
+  nctId: String!
+}
+
 type Query {
   health: String!
   landscapes: [Landscape!]!
   me: User!
+  portfolio: [PortfolioTrial!]!
   savedTrials: [SavedTrial!]!
   searchTrials(q: SearchTrialInput!): [TrialCard!]!
   trial(nctId: String!): TrialDetail

@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Cheap, fast, structured-output-capable model for query compilation. Override via
     # LLM_MODEL to use a larger model for harder queries.
     llm_model: str = "gpt-5-mini"
+    # Max distinct normalized queries whose plan is memoized (bounded LRU). Repeated/popular
+    # searches skip the planner — and its LLM call — entirely. 0 disables caching.
+    query_plan_cache_size: int = 512
 
     @property
     def asyncpg_database_url(self) -> str:

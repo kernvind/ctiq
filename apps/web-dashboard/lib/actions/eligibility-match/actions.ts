@@ -3,6 +3,7 @@
 import {
   ZodMatchTrialsSchema,
   ZodMatchTrialSchema,
+  ZodPatientProfileSchema,
 } from "@repo/zod-validations";
 import { withAuthedSdk } from "@/lib/authed-sdk";
 import { flattenZodErrors } from "@/lib/zod-errors";
@@ -20,6 +21,33 @@ function messageOf(err: unknown): string {
     (err as { response?: { errors?: { message: string }[] } })?.response
       ?.errors?.[0]?.message ?? "Something went wrong. Please try again."
   );
+}
+
+/**
+ * Portfolio screening (site-payer wedge): screen a profile against the current user's
+ * open-trial portfolio (no condition / no search). Returns the same ranked shape as
+ * matchTrials so the UI reuses the buckets/blockers/completeness. Profile is never persisted.
+ */
+export async function screenPortfolioAction(
+  profileInput: unknown,
+): Promise<MatchTrialsState> {
+  const parsed = ZodPatientProfileSchema.safeParse(profileInput);
+  if (!parsed.success) {
+    return { error: flattenZodErrors(parsed.error) };
+  }
+  try {
+    const data = await withAuthedSdk((sdk) =>
+      sdk.screenPortfolio_mutation({ profile: parsed.data }),
+    );
+    // Safe metadata only — never the profile (PHI) or the result bodies.
+    logger.info(
+      { resultCount: data.screenPortfolio.length },
+      "screenPortfolio completed",
+    );
+    return { results: data.screenPortfolio };
+  } catch (err) {
+    return { error: messageOf(err) };
+  }
 }
 
 /** Patient-first: rank recruiting trials for a condition by the profile's eligibility fit. */

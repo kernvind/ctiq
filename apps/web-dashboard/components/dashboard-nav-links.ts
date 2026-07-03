@@ -1,5 +1,6 @@
 import {
   Bookmark,
+  ClipboardList,
   LayoutDashboard,
   Map,
   Search,
@@ -33,6 +34,13 @@ export const NAV_LINKS: readonly NavLink[] = [
     label: "Eligibility Match",
     shortLabel: "Match",
     icon: Stethoscope,
+    roles: ["CLINICIAN"],
+  },
+  {
+    href: "/dashboard/screen",
+    label: "Portfolio Screening",
+    shortLabel: "Screen",
+    icon: ClipboardList,
     roles: ["CLINICIAN"],
   },
 ];

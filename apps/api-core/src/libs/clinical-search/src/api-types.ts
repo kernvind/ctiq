@@ -60,6 +60,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/match/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Match Portfolio
+         * @description Portfolio screening (site-payer wedge): rank an explicit set of trials — a site's
+         *     open-trial portfolio — by how well the patient profile matches their eligibility. No vector
+         *     search. Trials with no extracted criteria come back has_criteria=False. Profile not stored.
+         */
+        post: operations["match_portfolio_api_v1_match_portfolio_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/match/trials/{nct_id}": {
         parameters: {
             query?: never;
@@ -303,6 +325,17 @@ export interface components {
             washouts?: {
                 [key: string]: number;
             };
+        };
+        /**
+         * PortfolioMatchRequest
+         * @description Portfolio screening (site-payer wedge): screen a profile against an EXPLICIT set of
+         *     trials — the site's open-trial portfolio — instead of searching all of CT.gov. No vector
+         *     search; the candidate set is given. Profile is evaluated in-request, never persisted.
+         */
+        PortfolioMatchRequest: {
+            profile: components["schemas"]["PatientProfile"];
+            /** Nct Ids */
+            nct_ids?: string[];
         };
         /** Reference */
         Reference: {
@@ -622,6 +655,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PatientMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchedTrial"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_portfolio_api_v1_match_portfolio_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioMatchRequest"];
             };
         };
         responses: {

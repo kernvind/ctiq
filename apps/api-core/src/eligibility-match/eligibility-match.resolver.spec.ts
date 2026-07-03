@@ -13,11 +13,24 @@ const profile = {
 
 describe('EligibilityMatchResolver', () => {
   let resolver: EligibilityMatchResolver;
-  let service: { matchTrial: jest.Mock; matchTrials: jest.Mock };
+  let service: {
+    matchTrial: jest.Mock;
+    matchTrials: jest.Mock;
+    screenPortfolio: jest.Mock;
+  };
+  let portfolio: { nctIdsForUser: jest.Mock };
 
   beforeEach(() => {
-    service = { matchTrial: jest.fn(), matchTrials: jest.fn() };
-    resolver = new EligibilityMatchResolver(service as never);
+    service = {
+      matchTrial: jest.fn(),
+      matchTrials: jest.fn(),
+      screenPortfolio: jest.fn(),
+    };
+    portfolio = { nctIdsForUser: jest.fn() };
+    resolver = new EligibilityMatchResolver(
+      service as never,
+      portfolio as never,
+    );
   });
 
   it('is gated to the CLINICIAN role (locks the clinician-only product rule)', () => {
@@ -39,5 +52,16 @@ describe('EligibilityMatchResolver', () => {
 
     await expect(resolver.matchTrials('melanoma', profile, 25, false)).resolves.toBe(ranked);
     expect(service.matchTrials).toHaveBeenCalledWith('melanoma', profile, 25, false);
+  });
+
+  it('screenPortfolio loads the user\'s portfolio NCT ids and forwards them with the profile', async () => {
+    const ranked = [{ nct_id: 'NCT1', signal: 'likely_excluded' }];
+    portfolio.nctIdsForUser.mockResolvedValue(['NCT1', 'NCT2']);
+    service.screenPortfolio.mockResolvedValue(ranked);
+
+    const user = { id: 'user-123' } as never;
+    await expect(resolver.screenPortfolio(user, profile)).resolves.toBe(ranked);
+    expect(portfolio.nctIdsForUser).toHaveBeenCalledWith('user-123');
+    expect(service.screenPortfolio).toHaveBeenCalledWith(['NCT1', 'NCT2'], profile);
   });
 });

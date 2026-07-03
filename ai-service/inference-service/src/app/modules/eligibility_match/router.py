@@ -8,6 +8,7 @@ from src.app.modules.eligibility_match.schemas import (
     MatchResult,
     PatientMatchRequest,
     PatientProfile,
+    PortfolioMatchRequest,
 )
 
 router = APIRouter(prefix="/api/v1/match", tags=["match"])
@@ -22,6 +23,17 @@ async def match_trials(
     matches their structured eligibility. Drill into POST /match/trials/{nct_id} for the
     per-criterion verdicts. The profile is evaluated in-request and never stored."""
     return await service.match_trials(request)
+
+
+@router.post("/portfolio", response_model=list[MatchedTrial])
+async def match_portfolio(
+    service: PatientMatchServiceDep,
+    request: PortfolioMatchRequest,
+) -> list[MatchedTrial]:
+    """Portfolio screening (site-payer wedge): rank an explicit set of trials — a site's
+    open-trial portfolio — by how well the patient profile matches their eligibility. No vector
+    search. Trials with no extracted criteria come back has_criteria=False. Profile not stored."""
+    return await service.screen_portfolio(request.profile, request.nct_ids)
 
 
 @router.post("/trials/{nct_id}", response_model=MatchResult)

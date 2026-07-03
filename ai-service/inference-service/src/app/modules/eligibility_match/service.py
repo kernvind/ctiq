@@ -112,3 +112,26 @@ class PatientMatchService:
             (t_rank - t0) * 1000,
         )
         return ranked
+
+    async def screen_portfolio(
+        self, profile: PatientProfile, nct_ids: list[str]
+    ) -> list[MatchedTrial]:
+        """Screen a profile against an EXPLICIT set of trials (a site's open-trial portfolio).
+        No embedding / no vector search — the candidate set is given, so this just hydrates the
+        trials' metadata + criteria and ranks them. Trials with no extracted criteria come back
+        has_criteria=False (the UI shows "criteria not available"). Profile is never persisted."""
+        if not nct_ids:
+            return []
+        candidates = await self.search_repository.get_trials_meta(nct_ids)
+        criteria_by_nct = await self.match_repository.get_criteria_bulk(
+            [c["nct_id"] for c in candidates]
+        )
+        ranked = rank_matches(candidates, criteria_by_nct, profile)
+        logger.info(
+            "Portfolio screen: requested=%d matched=%d (eligible=%d possible=%d excluded=%d)",
+            len(nct_ids), len(ranked),
+            sum(m.signal.value == "likely_eligible" for m in ranked),
+            sum(m.signal.value == "possible" for m in ranked),
+            sum(m.signal.value == "likely_excluded" for m in ranked),
+        )
+        return ranked

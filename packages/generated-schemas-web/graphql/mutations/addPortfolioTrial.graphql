@@ -1,0 +1,7 @@
+mutation addPortfolioTrial_mutation($nctId: String!) {
+  addPortfolioTrial(nctId: $nctId) {
+    createdAt
+    id
+    nctId
+  }
+}

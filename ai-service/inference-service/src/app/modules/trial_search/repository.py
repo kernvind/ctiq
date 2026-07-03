@@ -138,6 +138,25 @@ class TrialSearchRepository:
         )
         return {t.nct_id: t for t in rows}
 
+    async def get_trials_meta(self, nct_ids: list[str]) -> list[dict]:
+        """Candidate display metadata for an explicit set of trials (portfolio screening) — the
+        same dict shape `rank_matches` consumes, with no embeddings or vector search. nct_ids
+        with no trial row are skipped (we can't display what isn't ingested)."""
+        if not nct_ids:
+            return []
+        trials = await self._fetch_trials(nct_ids)
+        return [
+            {
+                "nct_id": t.nct_id,
+                "brief_title": t.brief_title,
+                "overall_status": t.overall_status,
+                "phases": t.phases or [],
+                "conditions": t.conditions or [],
+                "lead_sponsor_name": t.lead_sponsor_name,
+            }
+            for t in trials.values()
+        ]
+
     async def _fetch_locations(self, nct_ids: list[str]) -> dict[str, list[TrialLocation]]:
         rows = await self.session.scalars(
             select(TrialLocation).where(TrialLocation.nct_id.in_(nct_ids))

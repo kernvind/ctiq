@@ -4,7 +4,7 @@ Living source of truth for what's built, what's in flight, and how to deploy it.
 Maintained in the repo (versioned) because the product-engineering skill's backlog is a
 read-only cache that doesn't persist across sessions.
 
-**Last updated:** 2026-06-28
+**Last updated:** 2026-06-30
 
 ---
 
@@ -16,10 +16,17 @@ Hetzner VM (Docker Compose). Two surfaces:
 - **Public free tier** (no account): semantic trial search, trial detail, side-by-side
   compare.
 - **Authed tier** (the product): role-aware dashboard, saved trials, saved landscapes +
-  monitoring. New features go here; the public surface is the acquisition funnel.
+  monitoring, eligibility matching, and **portfolio screening** (site-payer wedge). New
+  features go here; the public surface is the acquisition funnel.
 
 Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro tier),
 **Analyst/Competitor** (Intelligence tier — the revenue engine), **Admin** (internal).
+
+**Go-to-market direction (2026-06-30):** the first paying customer is the **trial site /
+network**, not the individual clinician — enrollment is revenue, and the coordinator who screens
+patients is the user. This flips the clinician product from "patient → all of CT.gov" to "**my
+open trials → is this patient eligible?**" The eligibility matcher + explainability is the trust
+layer every version of that needs; the site wedge points it at a payer. See ROADMAP "Site-payer wedge".
 
 ---
 
@@ -79,6 +86,13 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
   filter (the intent still only selects which fields to search). The service embeds the
   filter-stripped `semantic_query` (falling back to the raw query when it's empty), so
   "phase 3 Pfizer" no longer pollutes the vector match — the slice-3 quick win, done.
+- **Planner efficiency (fast-path + cache) ✅** — the LLM call is skipped for queries with no
+  structured-filter signal (`needs_llm`: no phase/status/sponsor hint → rule-based, since a plain
+  condition query has nothing to extract or strip), and an LRU (`CachingQueryPlanner`,
+  `query_plan_cache_size`) memoizes plans by normalized query so repeated/popular searches never
+  re-hit the LLM. Keeps the highest-volume surface off the LLM. Composition:
+  `cache(fast-path(LLM + rule-based fallback))`. (Stale docstrings that claimed the filters
+  weren't wired were also corrected.)
 
 ### Structured eligibility (Asset 1 — flagship IP) — Stage A shipped
 - **Per-criterion extraction** — the `eligibility_criteria` blob is split + classified into
@@ -125,6 +139,26 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
   timing → UNCERTAIN); surgery/prior-trial events still bucket under `prior_therapy` (taxonomy
   split deferred); days-since is integer-only (no date input yet).
 
+### Portfolio screening (site-payer wedge v1 — no PHI) ✅
+- **The pivot in product form:** instead of searching all of CT.gov, a site keeps an **open-trial
+  portfolio** and screens a patient against *only* those trials — the "which of MY trials does this
+  patient fit?" flow the trial-site payer actually wants. One patient at a time, at the point of
+  care; the profile is evaluated in-request and **never persisted** (no PHI, no patient panels/EHR).
+- **Storage:** new `PortfolioTrial` Prisma model (user-scoped, `userId + nctId` unique, by-ID
+  reference — no cross-ORM FK), a sibling of `SavedTrial`. Migration `20260629000000_portfolio_trials`.
+- **Scoped matching:** new `POST /api/v1/match/portfolio {profile, nct_ids}` in inference — **no
+  vector search** (candidate set is explicit); reuses `get_trials_meta` (new) + `get_criteria_bulk`
+  + `rank_matches`, so blockers/completeness come for free. Portfolio trials with no extracted
+  criteria surface as `has_criteria=False` → "criteria not available" (no extraction-on-add in v1).
+- **Wired:** inference endpoint → api-core (`portfolio` CRUD module + `screenPortfolio` resolver,
+  CLINICIAN-gated, reads the user's NCT ids and forwards) → web (portfolio manager + screening view
+  reusing `MatchView` via a `mode` prop, lifted state so "Screen patient" enables live once a trial
+  is added, CLINICIAN-only `/dashboard/screen` route + nav link).
+- **Known gaps / fast-follows:** portfolio trials need extracted eligibility to produce verdicts
+  (the backfill unblocks this too); no **extraction-on-add**, no aggregate **enrollment funnel**
+  (screened/eligible/enrolled counters — the ROI dashboard, PHI-free), no population/EHR screening
+  (the PHI tier), no org-scoped portfolios (user-scoped for now — no org model yet).
+
 ---
 
 ## In flight / next
@@ -134,15 +168,23 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
    `_EXTRACTOR_VERSION` → `3-washout` bump invalidates all eligibility `source_hash`es, so this
    also backfills `washout_days` predicates; stale single-chunk `eligibility` vectors are
    dropped and the two new field types populate (replace-by-nct_id only swaps a trial's vectors
-   when it's re-embedded). Until this runs, washout matching has no predicates to act on.
-2. **Washout follow-ups (ROADMAP 6b tail)** — split surgery/prior-trial events out of the
+   when it's re-embedded). **The gating item** — until this runs, *both* the matcher and portfolio
+   screening have few predicates to act on (most trials show "criteria not available").
+2. **Site-payer wedge fast-follows** (the chosen GTM direction — see ROADMAP):
+   (a) **extraction-on-add** — extract eligibility for a portfolio trial the moment it's added, so
+   a site's whole portfolio is screenable without waiting on the global backfill;
+   (b) **aggregate enrollment funnel** — per-portfolio-trial screened/eligible/enrolled counters
+   (anonymous tallies, still PHI-free) — the ROI dashboard that justifies the site paying;
+   (c) later tier: **population/panel + EHR screening** (crosses into PHI — needs a BAA) and
+   **org/network-scoped** portfolios (needs an org model).
+3. **Washout follow-ups (ROADMAP 6b tail)** — split surgery/prior-trial events out of the
    `prior_therapy` category (their own taxonomy + evaluator dispatch), and add date-based
    timing input (compute days-since) alongside today's integer days-since.
-3. **Change-event capture (ROADMAP NOW #2)** — diff-on-upsert into a new
+4. **Change-event capture (ROADMAP NOW #2)** — diff-on-upsert into a new
    `trial_change_events` model so the compounding "change intelligence" moat starts
    accumulating. Cheap, time-sensitive (history is destroyed on every re-ingest today),
    independent of the search path.
-4. **Compare selection UX polish**, **scheduled agent monitoring** (move landscape
+5. **Compare selection UX polish**, **scheduled agent monitoring** (move landscape
    monitoring from on-view to a cron + activity-feed digest — needs a scheduler),
    **BigQuery analytics** (trend/aggregate CI — no live read path yet), and the
    **AI tier** (summaries, eligibility help, chat — registered users).
@@ -154,8 +196,10 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
 - **Two ORMs, split by domain:** `@repo/db` (Prisma) owns user/auth in the `app` schema;
   `ctiq-db` (SQLAlchemy) owns clinical-trial tables in the `trials` schema. Disjoint;
   cross-domain links are **by NCT-id reference, never a cross-ORM FK**.
-- **The LLM is only in the query *planner*** — gated on `OPENAI_API_KEY`, always
-  fallback-protected. No RAG / no generated answers. Embeddings remain **local**
+- **The LLM does structured extraction, never generation** — two uses only: the query
+  *planner* (search, `OPENAI_API_KEY`-gated + rule-based fallback) and *eligibility extraction*
+  (ETL, `responses.parse` → typed predicates). **No RAG / no generated answers**, and the
+  **matcher is pure deterministic logic (no LLM)**. Embeddings remain **local**
   (`sentence-transformers`, `nomic-ai/nomic-embed-text-v1.5`).
 - **Codegen pipeline:** api-core is GraphQL code-first → `schema.gql` (`schema:generate`);
   the web sdk's `.graphql` operation docs are **generated** from `schema.gql`
@@ -166,17 +210,17 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
 
 ---
 
-## Test status (all green as of 2026-06-28)
+## Test status (all green as of 2026-06-30)
 
 | Suite | Result |
 |---|---|
-| api-core (Jest, unit) | 87 passed (+ eligibility-match service 9 [washout fold] / resolver 3) |
+| api-core (Jest, unit) | 91 passed (+ portfolio service 3 / screening resolver 1) |
 | api-core integration (`session.int-spec`, Testcontainers) | 5 passed |
 | api-core auth e2e (full app + Postgres) | all checks passed (+ 3 clinician-gating checks) |
-| web-dashboard (Vitest) | 131 passed (+ match-logic washout/assessability/coverage, match logger) |
-| inference-service (pytest, unit) | 112 passed (+ evaluator 32 [washout + blockers], match router 6) |
+| web-dashboard (Vitest) | 135 passed (+ screenPortfolio action, screening nav link) |
+| inference-service (pytest, unit) | 122 passed (+ portfolio router 2 / screen-portfolio service 2, planner fast-path/cache 6) |
 | inference-service integration (pgvector, Docker) | 15 passed (+ eligibility repository 5) |
-| ETL `ctiq_etl` (pytest, unit) | 35 passed (+ washout predicate round-trip; `make test-etl`) |
+| ETL `ctiq_etl` (pytest, unit) | 35 passed (`make test-etl`) |
 
 ---
 
@@ -184,7 +228,10 @@ Personas: **Patient** (free funnel + future AI assistant), **Clinician** (Pro ti
 
 - **Pending Prisma migrations** to run on the next deploy (in order):
   `20260622000000_user_remove_username`, `20260622010000_saved_trials`,
-  `20260622020000_landscapes`.
+  `20260622020000_landscapes`, `20260629000000_portfolio_trials` (open-trial portfolio).
+  (The dev/pooler DB is already migrated — `prisma migrate status` clean as of 2026-06-30.)
+- **New api-core env:** `FAST_API_MATCH_PORTFOLIO_PATH` (default `/match/portfolio`) — the
+  inference route for portfolio screening. Code defaults it, so absence won't break startup.
 - **Pending Alembic (`ctiq-db`, `trials` schema) migrations:** `0005` (trial eligibility
   criteria) and `0006` (eligibility batch jobs). Run before the eligibility ETL/matcher path.
 - **inference-service needs `OPENAI_API_KEY`** in its prod env to activate the LLM

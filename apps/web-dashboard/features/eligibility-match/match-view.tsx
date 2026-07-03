@@ -12,6 +12,7 @@ import type {
 import {
   matchTrialsAction,
   matchTrialAction,
+  screenPortfolioAction,
 } from "@/lib/actions/eligibility-match/actions";
 import {
   buildProfile,
@@ -38,7 +39,22 @@ const VERDICT_META: Record<Verdict, { label: string; cls: string }> = {
   NOT_EVALUATED: { label: "Not eval.", cls: "bg-muted text-muted-foreground" },
 };
 
-export function MatchView() {
+/**
+ * `mode` decides what the form screens against:
+ *  - "search"    → all recruiting trials for a typed condition (patient-first search).
+ *  - "portfolio" → only the site's open-trial portfolio, no condition (site-payer wedge).
+ * Everything else — the profile form, ranked buckets, blockers, completeness, drill-in — is shared.
+ */
+export function MatchView({
+  mode = "search",
+  // Portfolio mode only: false disables "Screen patient" (an empty portfolio has nothing to
+  // screen against). The parent keeps this in sync with the portfolio as trials are added.
+  canScreen = true,
+}: {
+  mode?: "search" | "portfolio";
+  canScreen?: boolean;
+} = {}) {
+  const isPortfolio = mode === "portfolio";
   // ── profile form state ──────────────────────────────────────────────────
   const [condition, setCondition] = useState("");
   const [age, setAge] = useState("");
@@ -75,7 +91,9 @@ export function MatchView() {
     const profile = currentProfile();
     setMatchedProfile(profile);
     startMatch(async () => {
-      const state = await matchTrialsAction({ condition, profile });
+      const state = isPortfolio
+        ? await screenPortfolioAction(profile)
+        : await matchTrialsAction({ condition, profile });
       if (state?.error) {
         setError(state.error);
         setResults(null);
@@ -102,23 +120,28 @@ export function MatchView() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-5 p-6">
       <div>
-        <h2 className="text-lg font-semibold">Find trials for your patient</h2>
+        <h2 className="text-lg font-semibold">
+          {isPortfolio ? "Screen against your open trials" : "Find trials for your patient"}
+        </h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Enter a condition and the patient&apos;s profile to rank recruiting trials by
-          eligibility fit.
+          {isPortfolio
+            ? "Enter the patient's profile to see which of your portfolio trials they may be eligible for."
+            : "Enter a condition and the patient's profile to rank recruiting trials by eligibility fit."}
         </p>
       </div>
 
       {/* ── Profile form ─────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 rounded-xl border bg-background p-4">
-        <Field label="Condition">
-          <input
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-            placeholder="e.g. non-small cell lung cancer"
-            className="w-full rounded-md border px-2.5 py-1.5 text-sm"
-          />
-        </Field>
+        {!isPortfolio && (
+          <Field label="Condition">
+            <input
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
+              placeholder="e.g. non-small cell lung cancer"
+              className="w-full rounded-md border px-2.5 py-1.5 text-sm"
+            />
+          </Field>
+        )}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Age">
@@ -180,12 +203,22 @@ export function MatchView() {
 
         <button
           onClick={onSubmit}
-          disabled={matchPending || condition.trim().length < 2}
+          disabled={
+            matchPending ||
+            (!isPortfolio && condition.trim().length < 2) ||
+            (isPortfolio && !canScreen)
+          }
           className="mt-1 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
           {matchPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Match trials
+          {isPortfolio ? "Screen patient" : "Match trials"}
         </button>
+
+        {isPortfolio && !canScreen && (
+          <p className="text-[11px] text-muted-foreground">
+            Add a trial under “Your open trials” above to screen against your portfolio.
+          </p>
+        )}
       </div>
 
       <p className="text-[11px] text-muted-foreground">
@@ -196,7 +229,11 @@ export function MatchView() {
 
       {/* ── Ranked results ───────────────────────────────────────────── */}
       {results && results.length === 0 && (
-        <p className="text-sm text-muted-foreground">No recruiting trials found for that condition.</p>
+        <p className="text-sm text-muted-foreground">
+          {isPortfolio
+            ? "No portfolio trials to screen yet — add the trials your site is running under “Your open trials” above, then screen."
+            : "No recruiting trials found for that condition."}
+        </p>
       )}
 
       {results && results.length > 0 && (

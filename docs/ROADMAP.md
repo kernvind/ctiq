@@ -6,7 +6,7 @@ How the three defensible assets get built on top of the **current** schema
 is the forward plan organized around *what makes the product defensible*, not just the
 next ticket.
 
-**Last updated:** 2026-06-28
+**Last updated:** 2026-06-30
 
 ---
 
@@ -31,6 +31,45 @@ above are what it points at.
 
 ---
 
+## Product direction: the site-payer wedge (chosen 2026-06-30)
+
+The thesis says *what* the moat is (structured eligibility). This says *who pays for it first*.
+
+**A clinician is the user, not the payer.** Individual clinicians are weak SaaS buyers — busy,
+time-pressured, and a community oncologist who refers a patient *out* to a trial often *loses*
+that patient's revenue, so some are structurally disincentivized to do the thing the tool helps
+with. The recruitment money in this market sits with **trial sites / networks and sponsors**:
+enrollment is revenue (often $5k–25k+ per enrolled patient), and recruitment is the #1 bottleneck
+in all of clinical research. The comparable companies (Deep6, TriNetX, Mendel, Tempus, Paradigm)
+monetize the site/sponsor side, not clinician subscriptions.
+
+**First customer = the trial site / network.** This flips the clinician product from
+"patient → search all of CT.gov" to "**my open trials → is this patient eligible?**", scoped to
+the site's portfolio, with the **research coordinator** as the daily user. The eligibility matcher
++ explainability (per-criterion "why", completeness, blockers) is the trust layer this requires —
+a coordinator screening at volume needs to know exactly which criteria to verify. The site model
+also **sidesteps the extraction-coverage problem**: a site needs only its ~30 open trials
+structured well (curatable), not all 590k.
+
+**Sequencing (WHO pays, not just what to build):**
+- **Now — no-PHI wedge (shipped v1):** open-trial **portfolio** + one-patient-at-a-time
+  point-of-care screening against it. Profile never persisted; no patient panels/EHR. See
+  STATUS "Portfolio screening". Validates demand before taking on PHI infrastructure.
+- **Next — prove ROI + widen the portfolio:** **extraction-on-add** (a site's whole portfolio
+  becomes screenable without the global backfill) and an **aggregate enrollment funnel**
+  (anonymous screened/eligible/enrolled tallies — still PHI-free — the dashboard that justifies
+  the site paying).
+- **Later — the PHI tier:** population/panel screening against an EHR patient feed (needs a BAA)
+  and **org/network-scoped** portfolios (needs an org model — none today). This is the deliberate
+  moment to cross the PHI threshold, with the wedge having proven demand first.
+- **Adjacent — sponsor side (two-sided):** the same explained, pre-screened matches are what
+  sponsors/CROs pay for recruitment — the "Analyst/Competitor" persona is that side of the market.
+
+None of this changes the three assets; it points **Asset 1** at a payer and makes the
+**explainability** (not the raw matching) the commercial differentiator.
+
+---
+
 ## Current-state facts this roadmap builds on
 
 Grounded in the repo as of 2026-06-23:
@@ -43,8 +82,11 @@ Grounded in the repo as of 2026-06-23:
 - **`Intent.COMPETITIVE_INTEL`** maps to the same fields as DESCRIPTIVE, but is no longer
   a no-op: the structured filters (sponsor/phase/status/condition) now apply regardless of
   intent, so competitive-intel queries actually filter.
-- **Eligibility is embedded as one chunk** per trial (`field_type="eligibility"`); the
-  ETL flags this as a v0 limitation that hurts matching.
+- **Eligibility is now embedded per item** (`eligibility_inclusion` / `eligibility_exclusion`,
+  Stage A shipped) and split + classified into `trial_eligibility_criteria` with Stage-B
+  predicates — the structured matcher + portfolio screening run on these. The old single averaged
+  `eligibility` chunk is deprecated (dropped on re-embed). *(Updated 2026-06-30 — was the v0
+  single-chunk limitation; the global backfill to populate it everywhere is still pending.)*
 - **The ETL upsert overwrites in place** (`_trial_upsert`: `on_conflict_do_update`,
   newer `ingested_at` wins; child tables DELETE+INSERT). No diff is captured — prior
   state is gone after each run.

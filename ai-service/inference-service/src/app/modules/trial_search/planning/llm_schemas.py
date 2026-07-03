@@ -7,10 +7,11 @@ class CompiledQuery(BaseModel):
     """A user's natural-language trial search, compiled by the LLM planner into a
     structured query.
 
-    `semantic_query` feeds vector search; the rest are structured pre-filters. This is the
-    agent-ready contract: today only `intent` + `phases` shape the QueryPlan, but the LLM
-    already extracts `statuses` / `sponsor` / `conditions` so wiring them into the
-    repository's SQL pre-filters is additive (no prompt or schema change needed then).
+    `semantic_query` feeds vector search; the rest are structured pre-filters. The planner
+    maps all of these onto the `QueryPlan`, and the repository applies them as SQL pre-filters
+    (status `IN`, phase array-overlap, sponsor/condition `ILIKE`) — see
+    `repository.vector_search`. `semantic_query` is embedded in place of the raw query so
+    filter words don't pollute the vector match.
     """
 
     # patient = user describing themselves seeking a trial; competitive_intel = analyst

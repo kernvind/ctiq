@@ -93,6 +93,41 @@ export class EligibilityMatchService {
     }
   }
 
+  /**
+   * Portfolio screening (site-payer wedge): screen a profile against an explicit set of
+   * trials (the user's open-trial portfolio) — no vector search. The caller supplies the NCT
+   * ids (loaded from the user's portfolio). Profile is forwarded, never persisted.
+   */
+  async screenPortfolio(
+    nctIds: string[],
+    profile: PatientProfileInput,
+  ): Promise<MatchedTrial[]> {
+    if (nctIds.length === 0) return [];
+    const api_version = this.configService.getOrThrow<string>(
+      'FAST_API_VERSION_V1',
+    );
+    const portfolio_path = this.configService.get<string>(
+      'FAST_API_MATCH_PORTFOLIO_PATH',
+      '/match/portfolio',
+    );
+    const body = {
+      profile: this.toInferenceProfile(profile),
+      nct_ids: nctIds,
+    };
+    try {
+      const { data } = await firstValueFrom(
+        this.http.post<MatchedTrial[]>(`${api_version}${portfolio_path}`, body),
+      );
+      return data;
+    } catch (e) {
+      const err = e as AxiosError;
+      this.logger.error(
+        `Portfolio screen failed: count=${nctIds.length} status=${err.response?.status} message=${err.message}`,
+      );
+      throw this.mapError(err);
+    }
+  }
+
   /** GraphQL input (typed pair lists) -> inference PatientProfile (maps + dict folding). */
   private toInferenceProfile(p: PatientProfileInput): PatientProfile {
     const biomarkers: Record<string, string | number> = {};

@@ -85,9 +85,11 @@ class LLMQueryPlanner:
     """NL->structured-query planner backed by an LLM (OpenAI structured outputs).
 
     Produces the same ``QueryPlan`` shape as the rule-based planner, so it drops into the
-    existing search path. The richer filters the LLM extracts (statuses/sponsor/
-    conditions) are carried on ``CompiledQuery`` and wired into the repository pre-filters
-    in a follow-up; today only ``intent`` + ``phases`` shape the plan.
+    existing search path. Unlike the rule-based planner (intent + phase only), it also
+    extracts ``statuses`` / ``sponsor`` / ``conditions`` and a filter-stripped
+    ``semantic_query`` — all of which are wired into the repository's SQL pre-filters and the
+    embedding input (see ``service.py`` and ``repository.vector_search``). This richer
+    extraction is the LLM planner's reason for existing over the rule-based one.
 
     The OpenAI client is injected (not constructed here) so the provider stays a swappable
     detail and the planner is unit-testable without network access.

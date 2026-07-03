@@ -38,6 +38,9 @@ class StubPatientService:
     async def match_trials(self, request):
         return self._results
 
+    async def screen_portfolio(self, profile, nct_ids):
+        return self._results
+
 
 def _client(match_result=None, patient_results=None) -> TestClient:
     app = FastAPI()
@@ -102,3 +105,26 @@ def test_patient_first_returns_ranked_list():
     body = res.json()
     assert len(body) == 1
     assert body[0]["nct_id"] == "NCT1" and body[0]["has_criteria"] is True
+
+
+# ── portfolio screening: POST /match/portfolio ───────────────────────────────
+def test_portfolio_requires_internal_token():
+    res = _client().post("/api/v1/match/portfolio", json={"profile": {}, "nct_ids": []})
+    assert res.status_code == 401
+
+
+def test_portfolio_returns_ranked_list():
+    ranked = [
+        MatchedTrial(
+            nct_id="NCT1", signal=TrialSignal.LIKELY_EXCLUDED,
+            n_pass=1, n_fail=1, n_uncertain=0, n_not_evaluated=0, has_criteria=True,
+        )
+    ]
+    res = _client(patient_results=ranked).post(
+        "/api/v1/match/portfolio",
+        json={"profile": {"ecog": 1}, "nct_ids": ["NCT1", "NCT2"]},
+        headers=_auth(),
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) == 1 and body[0]["nct_id"] == "NCT1"

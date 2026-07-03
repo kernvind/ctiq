@@ -1,0 +1,3 @@
+mutation removePortfolioTrial_mutation($nctId: String!) {
+  removePortfolioTrial(nctId: $nctId)
+}

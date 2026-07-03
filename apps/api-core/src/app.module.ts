@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { TrialSearchModule } from './trial-search/trial-search.module';
 import { EligibilityMatchModule } from './eligibility-match/eligibility-match.module';
 import { SavedTrialsModule } from './saved-trials/saved-trials.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
 import { LandscapesModule } from './landscapes/landscapes.module';
 import { HealthResolver } from './health/health.resolver';
 import { AppController } from './app.controller';
@@ -45,6 +46,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
     TrialSearchModule,
     EligibilityMatchModule,
     SavedTrialsModule,
+    PortfolioModule,
     LandscapesModule,
 
     // 4. GraphQL gateway setup

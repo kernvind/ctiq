@@ -1,0 +1,23 @@
+mutation screenPortfolio_mutation($profile: PatientProfileInput!) {
+  screenPortfolio(profile: $profile) {
+    blockers {
+      category
+      criterion_type
+      reason
+      text
+      verdict
+    }
+    brief_title
+    conditions
+    has_criteria
+    lead_sponsor_name
+    n_fail
+    n_not_evaluated
+    n_pass
+    n_uncertain
+    nct_id
+    overall_status
+    phases
+    signal
+  }
+}

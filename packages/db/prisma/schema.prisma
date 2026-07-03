@@ -47,9 +47,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions    Session[]
-  savedTrials SavedTrial[]
-  landscapes  Landscape[]
+  sessions        Session[]
+  savedTrials     SavedTrial[]
+  landscapes      Landscape[]
+  portfolioTrials PortfolioTrial[]
 
   @@schema("app")
 }
@@ -82,6 +83,24 @@ model Landscape {
 /// separate schema/ORM. One row per (user, trial); unique constraint makes saving
 /// idempotent.
 model SavedTrial {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nctId  String
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, nctId])
+  @@index([userId])
+  @@schema("app")
+}
+
+/// A trial in a site's "open-trial portfolio" — the studies they are actively running and
+/// want to enroll patients into (site-payer wedge). Same shape as SavedTrial but semantically
+/// distinct (a running portfolio, not a personal bookmark). `nctId` is a by-ID reference into
+/// the clinical-trial domain (ctiq-db), NOT a cross-ORM foreign key. One row per (user, trial);
+/// the unique constraint makes adding idempotent. User-scoped for v1 (no org model yet).
+model PortfolioTrial {
   id     String @id @default(cuid())
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

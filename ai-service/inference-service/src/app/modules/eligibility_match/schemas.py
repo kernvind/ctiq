@@ -94,3 +94,12 @@ class PatientMatchRequest(BaseModel):
     top_k: int = 50
     recruiting_only: bool = True
 
+
+class PortfolioMatchRequest(BaseModel):
+    """Portfolio screening (site-payer wedge): screen a profile against an EXPLICIT set of
+    trials — the site's open-trial portfolio — instead of searching all of CT.gov. No vector
+    search; the candidate set is given. Profile is evaluated in-request, never persisted."""
+
+    profile: PatientProfile
+    nct_ids: list[str] = Field(default_factory=list)
+
