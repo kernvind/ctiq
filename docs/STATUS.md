@@ -66,6 +66,21 @@ layer every version of that needs; the site wedge points it at a payer. See ROAD
   page re-runs the saved query, flags **New since last check**, and marks seen on view.
   Analyst dashboard surfaces real landscapes. Migration: `20260622020000_landscapes`.
 
+### Observability — inference-service (2026-11-05)
+- **JSON logs on stdout** (`core/set_logger.py`): replaces the text format + in-container rotating
+  files. `severity`/`message` keys match api-core's pino output. Per-request `request_id`
+  (ContextVar, `X-Request-ID` in/out) on every line. uvicorn's access log is disabled (it prints
+  `?q=<search text>`); `ObservabilityMiddleware` logs method/route/status/duration without the
+  query string.
+- **Prometheus metrics** (`infra/observability/`, `/metrics`): HTTP rate/latency/errors by route
+  template, embedding + vector-search latency, empty-result searches, planner cache hit/miss and
+  LLM-vs-rule-based routing, LLM latency/outcome/**token usage**, LLM→rule-based fallbacks.
+- **PHI hygiene:** removed raw query text from INFO/DEBUG log messages (now `query_len`, counts).
+- **Collection stack** (opt-in `--profile monitoring`): Prometheus + Loki + Alloy + Grafana with a
+  provisioned dashboard — see `infra/hetzner/README.md`. Not yet deployed.
+- **Not yet:** api-core `/metrics` + forwarding its request id to inference (cross-service trace),
+  ETL logging (still its own text `set_logger.py`), alert rules.
+
 ### LLM NL→query agent (OpenAI) — slices 1–2
 - **What it is:** an LLM-based query planner behind the existing `QueryPlannerProtocol`
   port. `inference-service/.../planning/llm_planner.py` uses the **OpenAI Responses API**

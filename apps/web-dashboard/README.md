@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web-dashboard
 
-## Getting Started
+Next.js 16 (App Router) frontend for ctiq. It talks only to **api-core** over GraphQL; it never
+reaches inference-service or the database directly.
 
-First, run the development server:
+## Surfaces
+
+- **Public (no account)** — `app/(public)/`: home + semantic search (`/search`, URL-driven via `?q=`),
+  trial detail (`/search/[nctId]`), side-by-side compare (`/compare?ids=…`), `/login`, `/signup`.
+- **Authed** — `app/dashboard/`: role-aware home, trials, saved trials (`/dashboard/saved`),
+  saved landscapes with "new since last check" (`/dashboard/landscapes`), eligibility match
+  (`/dashboard/match`) and portfolio screening (`/dashboard/screen`).
+
+## Develop
+
+From the repo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm turbo run generate:codegen        # typed GraphQL SDK; re-run when the GraphQL schema changes
+pnpm --filter web-dashboard dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Needs api-core running (default `http://localhost:3001`); copy `.env.example` to `.env` first.
+See the root [README](../../README.md) for the full local stack.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+|---|---|
+| `pnpm --filter web-dashboard dev` | dev server |
+| `pnpm --filter web-dashboard build` / `start` | production build / serve |
+| `pnpm --filter web-dashboard test` | Vitest unit tests |
+| `pnpm --filter web-dashboard lint` | ESLint |
+| `pnpm --filter web-dashboard codegen` | GraphQL Code Generator |
 
-## Learn More
+## Structure
 
-To learn more about Next.js, take a look at the following resources:
+- `app/` — routes and layouts (Server Components by default; add `"use client"` only where needed)
+- `features/`, `components/`, `hooks/`, `lib/` — feature code, shared UI, hooks, server actions and utilities
+- `proxy.ts` — request-time auth/route protection
+- UI primitives come from `@repo/ui` (shadcn); GraphQL types and the SDK from `@repo/graphql-types`
+  and `@repo/generated-schemas-web`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Configuration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`BACKEND_URL` (server-side), `NEXT_PUBLIC_API_URL` (browser, baked at build time) and
+`COOKIE_SECURE`. See `.env.example`.
