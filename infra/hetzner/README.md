@@ -114,3 +114,24 @@ rolling update. Acceptable for an MVP; move to k3s (`ctiq-hetzner-kubernetes`) w
   it if anonymous Hugging Face downloads get rate-limited.
 - **Lockout safety:** root/password SSH are disabled. Keep a second SSH session open when first
   connecting, and remember Hetzner's web Console (VNC) is the fallback if you lock yourself out.
+
+## Observability (optional)
+
+`inference-service` writes **one JSON object per line to stdout** (override with
+`LOG_FORMAT=text` / `LOG_LEVEL=DEBUG` for local work) and exposes Prometheus metrics at
+`/metrics` (internal network only - never route it through Caddy). Every request gets an
+`X-Request-ID`, stamped on every log line it produces.
+
+The collection stack is **opt-in** via a compose profile, so a normal deploy is unchanged:
+
+```bash
+# set GRAFANA_ADMIN_PASSWORD in .env.production first
+docker compose -f docker-compose.hetzner.yml --env-file .env.production --profile monitoring up -d
+ssh -L 3030:localhost:3030 deploy@<vm>      # then open http://localhost:3030 -> "ctiq - inference-service"
+```
+
+Prometheus (15-day metrics), Loki (14-day logs), Alloy (ships container logs) and Grafana add
+roughly 0.7-1 GB RAM - use the 8 GB plan. Configs live in `infra/monitoring/`. Example log query:
+`{service="inference-service"} | json | severity="ERROR"`.
+Never log raw search text or patient profiles; log lengths, counts and ids.
+

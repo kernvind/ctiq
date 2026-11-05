@@ -73,11 +73,82 @@ services:
     restart: unless-stopped
     depends_on: [web-dashboard]
 
+  # ── Observability (opt-in) ────────────────────────────────────────────────────
+  # Not started by a plain `up -d`. Enable with:
+  #   docker compose -f docker-compose.hetzner.yml --env-file .env.production \
+  #     --profile monitoring up -d
+  # Needs roughly 0.7-1 GB extra RAM; on the 4 GB cpx21 prefer an 8 GB plan first. None of these
+  # are routed through Caddy. Grafana binds to the VM's loopback only; reach it with
+  #   ssh -L 3030:localhost:3030 deploy@<vm>   ->   http://localhost:3030
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [monitoring]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [ctiq]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.5.0
+    profiles: [monitoring]
+    command: -config.file=/etc/loki/config.yaml
+    volumes:
+      - ./infra/monitoring/loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    networks: [ctiq]
+    restart: unless-stopped
+
+  # Tails container stdout via the Docker socket (read-only) and pushes to Loki. Mounting the
+  # socket gives this container visibility into every container on the host - keep it on the
+  # internal network and on a pinned image.
+  alloy:
+    image: grafana/alloy:v1.10.0
+    profiles: [monitoring]
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+    volumes:
+      - ./infra/monitoring/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    networks: [ctiq]
+    depends_on: [loki]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    profiles: [monitoring]
+    environment:
+      # SET A REAL PASSWORD in .env.production. The fallback exists only so a plain `up -d`
+      # (monitoring profile off) doesn't fail variable interpolation.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    ports:
+      - "127.0.0.1:3030:3000"
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks: [ctiq]
+    depends_on: [prometheus, loki]
+    restart: unless-stopped
+
 networks:
   ctiq:
 
 volumes:
   caddy_data:
+  prometheus_data:
+  loki_data:
+  alloy_data:
+  grafana_data:
 
 secrets:
   hf_token:

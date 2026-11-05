@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # inference-service exposes /metrics on its internal port; it publishes no host port, so this
+  # scrape (container-to-container on the `ctiq` network) is the only way to reach it.
+  - job_name: inference-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["inference-service:8000"]
+        labels:
+          service: inference-service
+  # api-core: add a job here once it exposes /metrics (planned next slice).
