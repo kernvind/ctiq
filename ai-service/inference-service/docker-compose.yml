@@ -1,7 +1,7 @@
 # Local development only — not used in production (K8s handles that).
 # Run from repo root: docker compose -f ai-service/inference-service/docker-compose.yml up
 #
-# Joins the postgres_db network defined in /Users/baljotsingh/docker/postgres/docker-compose.yml
+# Joins the postgres_db network defined in ~/docker/postgres/docker-compose.yml
 # so the service reaches Postgres directly by container name, no host.docker.internal needed.
 
 services:

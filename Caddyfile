@@ -1,6 +1,6 @@
 # Caddy reverse proxy — the only public-facing container on the VM.
 # Caddy requests a Let's Encrypt cert via HTTP-01 over port 80 and auto-renews it.
-# Requires an A record for hiq.kernvind.com pointing at the VM (5.75.169.62) before first start.
+# Requires an A record for hiq.kernvind.com pointing at the VM's public IP before first start.
 hiq.kernvind.com {
 	reverse_proxy web-dashboard:3000
 }

@@ -11,7 +11,7 @@ resource "google_bigquery_dataset" "healthcare_ai" {
 
   access {
     role          = "OWNER"
-    user_by_email = "baljotsingh1986@gmail.com"
+    user_by_email = var.dataset_owner_email
   }
   access {
     role          = "WRITER"

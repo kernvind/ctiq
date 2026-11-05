@@ -3,7 +3,7 @@
 #
 # Prerequisites:
 #   1. postgres_db network must exist:
-#      docker compose -f /Users/baljotsingh/docker/postgres/docker-compose.yml up -d
+#      docker compose -f ~/docker/postgres/docker-compose.yml up -d
 #   2. Set JWT_SECRET in your shell or apps/api-core/.env
 
 services:

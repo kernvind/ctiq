@@ -192,8 +192,8 @@ kubectl create secret generic supabase-db -n dev \
   --from-literal=PG_DATABASE_URL="postgresql://postgres:<pwd>@<ref>.pooler.supabase.com:6543/postgres"
 
 kubectl create secret generic api-core-secrets -n dev \
-  --from-literal=JWT_SECRET="change-me-in-production" \
-  --from-literal=SEARCH_API_TOKEN="test-token"
+  --from-literal=JWT_SECRET="$(openssl rand -base64 48)" \
+  --from-literal=SEARCH_API_TOKEN="$(openssl rand -hex 32)"
 ```
 
 | Secret | Key | Consumed by |
@@ -323,8 +323,8 @@ kubectl create secret generic supabase-db -n dev \
   --from-literal=DATABASE_URL="postgresql://postgres.<ref>:<pwd>@<host>.pooler.supabase.com:6543/postgres?pgbouncer=true" \
   --from-literal=PG_DATABASE_URL="postgresql://postgres.<ref>:<pwd>@<host>.pooler.supabase.com:5432/postgres"
 kubectl create secret generic api-core-secrets -n dev \
-  --from-literal=JWT_SECRET="change-me-in-production" \
-  --from-literal=SEARCH_API_TOKEN="test-token"
+  --from-literal=JWT_SECRET="$(openssl rand -base64 48)" \
+  --from-literal=SEARCH_API_TOKEN="$(openssl rand -hex 32)"
 
 kubectl apply -k infra/k8s/overlays/dev
 kubectl get pods -n dev -w
