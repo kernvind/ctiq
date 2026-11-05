@@ -18,6 +18,7 @@ import re
 from collections import OrderedDict
 
 from src.app.core.config import Settings
+from src.app.infra.observability.metrics import LLM_FALLBACKS, PLANNER_CACHE, PLANNER_ROUTE
 from src.app.modules.trial_search.planning.llm_planner import LLMQueryPlanner
 from src.app.modules.trial_search.planning.protocol import QueryPlannerProtocol
 from src.app.modules.trial_search.planning.rule_based_planner import RuleBasedQueryPlanner
@@ -66,6 +67,7 @@ class FallbackQueryPlanner:
         try:
             return await self._primary.plan(query)
         except Exception:
+            LLM_FALLBACKS.inc()
             logger.warning(
                 "LLM planner failed; falling back to rule-based planner", exc_info=True
             )
@@ -94,7 +96,9 @@ class FastPathQueryPlanner:
 
     async def plan(self, query: str) -> QueryPlan:
         if needs_llm(query):
+            PLANNER_ROUTE.labels("llm").inc()
             return await self._primary.plan(query)
+        PLANNER_ROUTE.labels("rule_based").inc()
         return self._simple.plan(query)
 
 
@@ -112,8 +116,10 @@ class CachingQueryPlanner:
         key = query.strip().lower()
         cached = self._cache.get(key)
         if cached is not None:
+            PLANNER_CACHE.labels("hit").inc()
             self._cache.move_to_end(key)
             return cached
+        PLANNER_CACHE.labels("miss").inc()
         # Note: two concurrent misses on the same key may both compute (no lock) — acceptable;
         # the cost is a rare duplicate call, never a corrupt cache (writes are await-free).
         plan = await self._inner.plan(query)

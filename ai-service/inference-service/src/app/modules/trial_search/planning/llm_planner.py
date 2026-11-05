@@ -1,8 +1,14 @@
 import logging
+import time
 from typing import Optional
 
 from openai import AsyncOpenAI
 
+from src.app.infra.observability.metrics import (
+    LLM_LATENCY,
+    LLM_REQUESTS,
+    LLM_TOKENS,
+)
 from src.app.modules.trial_search.planning.llm_schemas import CompiledQuery
 from src.app.modules.trial_search.planning.schemas import (
     INTENT_TO_FIELDS,
@@ -105,11 +111,34 @@ class LLMQueryPlanner:
         Uses the OpenAI Responses API (`responses.parse`) — the current structured-output
         surface and the right path for the GPT-5 family. `instructions` carries the system
         prompt; `output_parsed` is the typed `CompiledQuery` (or None on refusal)."""
-        response = await self._client.responses.parse(
-            model=self._model,
-            instructions=_SYSTEM_PROMPT,
-            input=query,
-            text_format=CompiledQuery,
+        started = time.perf_counter()
+        try:
+            response = await self._client.responses.parse(
+                model=self._model,
+                instructions=_SYSTEM_PROMPT,
+                input=query,
+                text_format=CompiledQuery,
+            )
+        except Exception:
+            LLM_REQUESTS.labels(self._model, "error").inc()
+            LLM_LATENCY.labels(self._model).observe(time.perf_counter() - started)
+            raise
+        duration = time.perf_counter() - started
+        LLM_LATENCY.labels(self._model).observe(duration)
+        LLM_REQUESTS.labels(self._model, "ok" if response.output_parsed else "refusal").inc()
+        usage = getattr(response, "usage", None)
+        input_tokens = getattr(usage, "input_tokens", 0) or 0
+        output_tokens = getattr(usage, "output_tokens", 0) or 0
+        LLM_TOKENS.labels(self._model, "input").inc(input_tokens)
+        LLM_TOKENS.labels(self._model, "output").inc(output_tokens)
+        logger.info(
+            "LLM planner call",
+            extra={
+                "llm_model": self._model,
+                "llm_duration_ms": round(duration * 1000, 1),
+                "llm_input_tokens": input_tokens,
+                "llm_output_tokens": output_tokens,
+            },
         )
         return response.output_parsed
 
@@ -126,7 +155,17 @@ class LLMQueryPlanner:
 
         try:
             intent = Intent(compiled.intent)
-            logger.info("LLM planner: compiled query; %s ", compiled.__str__())
+            # The compiled query holds a rewrite of the user's text; log only its shape.
+            logger.info(
+                "LLM planner: compiled query",
+                extra={
+                    "intent": compiled.intent,
+                    "n_phases": len(compiled.phases),
+                    "n_statuses": len(compiled.statuses),
+                    "n_conditions": len(compiled.conditions),
+                    "has_sponsor": bool(compiled.sponsor),
+                },
+            )
         except ValueError:
             intent = Intent.DESCRIPTIVE
             logger.warning("LLM planner: invalid intent; falling back to DESCRIPTIVE")

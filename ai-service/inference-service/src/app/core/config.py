@@ -1,11 +1,16 @@
 from functools import lru_cache
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    LOGDIR: str = "./logs"
+    # ── Logging ───────────────────────────────────────────────────────────────
+    # JSON to stdout by default (what log shippers want). LOG_FORMAT=text gives a readable
+    # line format for local development.
+    log_level: str = "INFO"
+    log_format: Literal["json", "text"] = "json"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

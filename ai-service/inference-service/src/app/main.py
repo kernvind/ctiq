@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
 import torch
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sentence_transformers import SentenceTransformer
 
 from src.app.api.security import verify_internal_token
@@ -10,6 +11,7 @@ from src.app.core.config import get_settings
 from src.app.core.set_logger import configure_logging
 from src.app.infra.embed.embedder import Embedder
 from src.app.infra.postgres.session import create_engine, create_session_factory
+from src.app.infra.observability.middleware import ObservabilityMiddleware
 from src.app.modules.trial_search.planning.planner_factory import build_query_planner
 
 settings = get_settings()
@@ -51,6 +53,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(ObservabilityMiddleware)
 
 from src.app.modules.trial_search.router import router as search_router
 from src.app.modules.eligibility_match.router import router as match_router
@@ -62,3 +65,11 @@ app.include_router(match_router, dependencies=[Depends(verify_internal_token)])
 @app.get("/")
 def read_root():
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    """Prometheus scrape endpoint. Unauthenticated by design: it carries no user data, and in
+    docker-compose this service publishes no host port, so only containers on the internal
+    network (Prometheus) can reach it. Do not expose it through the public reverse proxy."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

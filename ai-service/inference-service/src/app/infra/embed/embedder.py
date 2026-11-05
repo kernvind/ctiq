@@ -1,5 +1,7 @@
 from sentence_transformers import SentenceTransformer
 
+from src.app.infra.observability.metrics import EMBEDDING_LATENCY
+
 
 class Embedder:
     def __init__(self, model: SentenceTransformer):
@@ -14,10 +16,11 @@ class Embedder:
 
         text = text.strip()
 
-        vec = self._model.encode(
-            f"search_query: {text}",
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-        )
+        with EMBEDDING_LATENCY.time():
+            vec = self._model.encode(
+                f"search_query: {text}",
+                normalize_embeddings=True,
+                convert_to_numpy=True,
+            )
 
         return vec.tolist()

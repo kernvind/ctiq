@@ -5,6 +5,7 @@ from src.app.modules.trial_search.hydrater import to_card
 from src.app.modules.trial_search.repository import TrialSearchRepository
 from src.app.modules.trial_search.schemas import TrialCard, TrialDetail
 from src.app.infra.embed.embedder import Embedder
+from src.app.infra.observability.metrics import SEARCH_RESULTS, VECTOR_SEARCH_LATENCY
 from src.app.modules.trial_search.planning.schemas import QueryPlan
 from src.app.modules.trial_search.planning.protocol import QueryPlannerProtocol
 
@@ -28,7 +29,8 @@ class TrialSearchService:
             logger.info("Empty query received; returning no results")
             return []
 
-        logger.info("Search request received: query=%r", query)
+        # Free-text queries can contain patient details: log the length, never the text.
+        logger.info("Search request received", extra={"query_len": len(query)})
 
         # 1. Plan: decide what to search and how (async — the planner may call an LLM)
         plan: QueryPlan = await self.query_planner.plan(query=query)
@@ -48,22 +50,21 @@ class TrialSearchService:
         # filter words ("phase 3", "Pfizer") don't pollute the vector match; else the raw query.
         text_to_embed = plan.semantic_query or query
         embedding = self.embedder.embed_query(text_to_embed)
-        logger.debug("Embedded query=%r: dim=%d", text_to_embed, len(embedding))
+        logger.debug("Embedded query: dim=%d", len(embedding))
 
         # 3. Vector search with structured pre-filters
-        results = await self.repository.vector_search(
-            embedding=embedding,
-            fields=plan.fields,                # tuple — repo should accept Sequence
-            top_k=plan.top_k,
-            phase_filter=plan.phase_filter,
-            statuses=plan.status_filter,
-            sponsor=plan.sponsor_filter,
-            conditions=plan.condition_filter,
-        )
-        logger.info(
-            "Search complete: query=%r, results=%d",
-            query, len(results),
-        )
+        with VECTOR_SEARCH_LATENCY.time():
+            results = await self.repository.vector_search(
+                embedding=embedding,
+                fields=plan.fields,                # tuple — repo should accept Sequence
+                top_k=plan.top_k,
+                phase_filter=plan.phase_filter,
+                statuses=plan.status_filter,
+                sponsor=plan.sponsor_filter,
+                conditions=plan.condition_filter,
+            )
+        SEARCH_RESULTS.observe(len(results))
+        logger.info("Search complete", extra={"result_count": len(results)})
         cards = [to_card(row) for row in results]
         return cards
 
